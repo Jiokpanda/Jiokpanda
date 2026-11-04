@@ -1,0 +1,843 @@
+<title>ㄱ자 주방 3D 플랜</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: a wide 3D stage beside a narrow control rail; the seasoning-rack analysis reads below in one column */
+:root{
+  --paper:#F1F3F0; --surface:#FFFFFF; --stage:#E3E7E3; --ink:#1C2220; --ink-2:#3C4542; --muted:#5E6863;
+  --line:#D6DCD7; --ink-line:#8E9893; --seg:#F7F8F6; --seg-strong:#27302D; --on-strong:#F4F6F4;
+  --gochujang:#B23E2A; --on-accent:#FFFFFF; --memo:#2C66D2; --plan-red:#D6342A;
+  --ok:#22704A; --ok-soft:#DDEFE4; --warn:#8F5A0B; --warn-soft:#F5EAD6; --no:#A23224; --no-soft:#F6DFDA;
+  --chip-bg:rgba(255,255,255,.93);
+  --f-display:"Gowun Batang","Noto Serif KR","AppleMyungjo",serif;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#141816; --surface:#1B201E; --stage:#1F2422; --ink:#E6EBE8; --ink-2:#C6CEC9; --muted:#95A09A;
+    --line:#2E3532; --ink-line:#5D6762; --seg:#232927; --seg-strong:#DCE3DF; --on-strong:#151A18;
+    --gochujang:#E2674F; --on-accent:#1A0F0C; --memo:#73A0F4; --plan-red:#F0675C;
+    --ok:#7DCE9F; --ok-soft:#1C3227; --warn:#E3B061; --warn-soft:#3A2D15; --no:#F08A78; --no-soft:#3B1E19;
+    --chip-bg:rgba(27,32,30,.92);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#141816; --surface:#1B201E; --stage:#1F2422; --ink:#E6EBE8; --ink-2:#C6CEC9; --muted:#95A09A;
+  --line:#2E3532; --ink-line:#5D6762; --seg:#232927; --seg-strong:#DCE3DF; --on-strong:#151A18;
+  --gochujang:#E2674F; --on-accent:#1A0F0C; --memo:#73A0F4; --plan-red:#F0675C;
+  --ok:#7DCE9F; --ok-soft:#1C3227; --warn:#E3B061; --warn-soft:#3A2D15; --no:#F08A78; --no-soft:#3B1E19;
+  --chip-bg:rgba(27,32,30,.92);
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+body{
+  background:var(--paper); color:var(--ink); font-family:var(--f-body); font-size:15px; line-height:1.65;
+  padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:0 56px; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1240px; margin:0 auto}
+header.top{padding-block:28px 18px; display:grid; gap:8px}
+.eyebrow{font-family:var(--f-mono); font-size:12px; letter-spacing:.05em; color:var(--muted)}
+h1{font-family:var(--f-display); font-weight:700; font-size:clamp(28px, 4.2vw, 42px); line-height:1.15; margin:0; text-wrap:balance; letter-spacing:-.01em}
+.lede{max-width:64ch; margin:0; color:var(--ink-2)}
+.lede strong{color:var(--gochujang); font-weight:600}
+
+/* work area */
+.work{display:grid; grid-template-columns:minmax(0,1fr) 344px; gap:16px; align-items:start}
+@media (max-width: 920px){ .work{grid-template-columns:minmax(0,1fr)} }
+.stage{position:relative; height:clamp(380px, 70vh, 700px); background:var(--stage); border:1px solid var(--line); border-radius:6px; overflow:hidden; isolation:isolate}
+.stage canvas{display:block; width:100%; height:100%; touch-action:none; cursor:grab; outline:none}
+.stage canvas:active{cursor:grabbing}
+.views{position:absolute; left:10px; top:10px; display:flex; gap:4px; flex-wrap:wrap; z-index:2}
+.btn{font:inherit; font-size:13px; line-height:1; color:var(--ink); background:var(--chip-bg); border:1px solid var(--line); border-radius:5px; padding:8px 11px; cursor:pointer}
+.btn:hover{border-color:var(--ink-line)}
+.btn[aria-pressed="true"]{background:var(--seg-strong); color:var(--on-strong); border-color:var(--seg-strong)}
+.btn:focus-visible, .schemes input:focus-visible + span, .toggles input:focus-visible, .row-go:focus-visible{outline:2px solid var(--memo); outline-offset:2px}
+.pull{position:absolute; right:10px; bottom:10px; z-index:2; font:inherit; font-size:14px; font-weight:600; color:var(--on-accent); background:var(--gochujang); border:0; border-radius:5px; padding:10px 14px; cursor:pointer; box-shadow:0 1px 0 rgba(0,0,0,.08)}
+.pull:hover{filter:brightness(1.06)}
+.pull:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
+.hint{position:absolute; left:12px; bottom:12px; z-index:2; font-size:12px; color:var(--muted); max-width:52%; line-height:1.4; pointer-events:none}
+.hint .touch{display:none}
+@media (hover:none){ .hint .mouse{display:none} .hint .touch{display:inline} }
+.labels{position:absolute; inset:0; pointer-events:none; z-index:1; overflow:hidden}
+.chip{position:absolute; left:0; top:0; white-space:nowrap; font-size:12px; line-height:1.3; color:var(--ink); background:var(--chip-bg); border:1px solid var(--line); padding:3px 8px 3px 7px; border-radius:999px; display:flex; gap:6px; align-items:center; will-change:transform}
+.chip i{width:7px; height:7px; border-radius:50%; background:var(--plan-red); flex:none}
+.chip.memo i{background:var(--memo)}
+.chip.rack{background:var(--gochujang); color:var(--on-accent); border-color:transparent; font-weight:600}
+.chip.rack i{background:var(--on-accent)}
+.chip.dim{font-family:var(--f-mono); font-size:11px; padding:1px 6px; border-radius:3px; gap:0}
+.chip.dim i{display:none}
+.nogl{position:absolute; inset:0; display:grid; place-items:center; padding:24px; text-align:center; color:var(--muted)}
+
+/* control rail */
+.panel{display:grid; gap:18px; background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:16px; min-width:0}
+.rail-h{font-size:12px; color:var(--muted); letter-spacing:.04em; margin:0 0 8px}
+.schemes{border:0; padding:0; margin:0; min-width:0}
+.schemes legend{padding:0; font-size:12px; color:var(--muted); letter-spacing:.04em; margin-bottom:8px}
+.scheme-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+.schemes label{position:relative; display:block; cursor:pointer}
+.schemes input{position:absolute; opacity:0; width:1px; height:1px}
+.schemes span{display:grid; gap:1px; padding:8px 10px; border:1px solid var(--line); border-radius:5px; background:var(--paper); height:100%}
+.schemes input:checked + span{border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink); background:var(--surface)}
+.schemes b{font-weight:600; font-size:14px; display:flex; gap:6px; align-items:center}
+.schemes small{font-size:12px; color:var(--muted); line-height:1.35}
+.tag{font-size:11px; font-weight:600; color:var(--on-accent); background:var(--gochujang); border-radius:3px; padding:1px 5px; line-height:1.4}
+.note{margin:0; font-size:13.5px; color:var(--ink-2); line-height:1.6}
+.strips{display:grid; gap:10px}
+.strip-row{display:grid; gap:4px}
+.strip-label{font-size:12px; color:var(--muted); display:flex; justify-content:space-between; gap:8px}
+.bar{display:flex; height:56px; border:1px solid var(--ink-line); border-radius:3px; overflow:hidden}
+.seg{min-width:0; display:flex; align-items:center; justify-content:center; border-right:1px solid var(--ink-line); font-size:12px; background:var(--seg); color:var(--ink)}
+.seg:last-child{border-right:0}
+.seg span{white-space:nowrap}
+.seg.narrow span{writing-mode:vertical-rl; font-size:11px; letter-spacing:.05em}
+.seg-cook{background:var(--seg-strong); color:var(--on-strong)}
+.seg-rack{background:var(--gochujang); color:var(--on-accent); font-weight:600}
+.seg-filler{background:var(--line)}
+.seg-corner{background:repeating-linear-gradient(135deg, var(--seg) 0 5px, var(--line) 5px 6px); color:var(--muted)}
+.dims{display:flex; font-family:var(--f-mono); font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums}
+.dims .d{min-width:0; display:flex; justify-content:center; white-space:nowrap}
+.dims .d.chg{color:var(--gochujang); font-weight:500}
+.axis{display:flex; justify-content:space-between; font-size:11px; color:var(--muted)}
+.toggles{display:flex; flex-wrap:wrap; gap:6px 16px; font-size:13px}
+.toggles label{display:flex; gap:6px; align-items:center; cursor:pointer}
+.toggles input{accent-color:var(--seg-strong); width:15px; height:15px; margin:0}
+
+/* analysis */
+.analysis{margin-top:44px; display:grid; gap:28px}
+.verdict{display:grid; gap:10px; max-width:70ch}
+h2{font-family:var(--f-display); font-weight:700; font-size:clamp(23px, 3vw, 31px); line-height:1.25; margin:0; text-wrap:balance}
+.verdict p{margin:0; color:var(--ink-2)}
+.math{display:grid; gap:2px; font-family:var(--f-mono); font-size:13px; background:var(--surface); border:1px solid var(--line); border-radius:5px; padding:10px 12px; color:var(--ink); overflow-x:auto; white-space:nowrap; font-variant-numeric:tabular-nums}
+.math em{font-style:normal; color:var(--gochujang); font-weight:500}
+.table-wrap{overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:6px}
+table{border-collapse:collapse; width:100%; min-width:760px; font-size:14px}
+th{text-align:left; font-weight:600; font-size:12px; color:var(--muted); letter-spacing:.04em; border-bottom:1px solid var(--ink-line); padding:10px 12px; white-space:nowrap}
+td{padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:top; line-height:1.5}
+tr:last-child td{border-bottom:0}
+td.k{font-family:var(--f-mono); font-weight:500; white-space:nowrap}
+td .sub{display:block; font-size:12.5px; color:var(--muted)}
+.pill{display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap}
+.pill.ok{background:var(--ok-soft); color:var(--ok)}
+.pill.mid{background:var(--line); color:var(--ink)}
+.pill.warn{background:var(--warn-soft); color:var(--warn)}
+.pill.no{background:var(--no-soft); color:var(--no)}
+.row-go{font:inherit; font-size:12px; color:var(--memo); background:none; border:0; padding:0; margin-top:6px; cursor:pointer; text-decoration:underline; text-underline-offset:3px; display:block}
+.cols{display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap:28px}
+h3{font-size:16px; font-weight:600; margin:0 0 10px}
+.cols ul{margin:0; padding-left:1.1em; display:grid; gap:9px; max-width:64ch; color:var(--ink-2)}
+.cols li b{color:var(--ink); font-weight:600}
+.num{font-family:var(--f-mono); font-size:.93em; font-variant-numeric:tabular-nums}
+footer{margin-top:40px; font-size:12px; color:var(--muted)}
+@media (max-width: 520px){
+  .stage{height:clamp(360px, 62vh, 520px)}
+  .btn{padding:7px 9px; font-size:12px}
+  .pull{font-size:13px; padding:9px 12px}
+  .hint{max-width:45%}
+}
+@media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto!important} }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">오른쪽 벽 3,130 · 아래 조리대 1,850 · 단위 mm</div>
+    <h1>ㄱ자 주방 3D 플랜</h1>
+    <p class="lede">도면 치수대로 주방을 세워 봤어요. 드래그해서 돌려 보고, 배치안을 바꿔 가며 양념망장 자리를 비교해 보세요. 결론부터 말하면 <strong>개수대장을 1150에서 900으로 줄이면 쿡탑 바로 옆에 200 망장이 들어가요.</strong></p>
+  </header>
+
+  <section class="work" aria-label="3D 주방 모델과 배치안">
+    <div class="stage" id="stage">
+      <canvas id="gl" role="img" aria-label="ㄱ자 주방 3D 모델. 왼쪽 키큰장(가전장, 김치냉장고, 냉장고, 홈바)과 오른쪽 벽 조리대(쿡탑, 식세기, 개수대), 아래쪽 조리대(로봇청소기 자리, 코너장)."></canvas>
+      <div class="labels" id="labels"></div>
+      <div class="views" role="group" aria-label="시점">
+        <button class="btn" type="button" data-view="overview" aria-pressed="true">전체</button>
+        <button class="btn" type="button" data-view="counter" aria-pressed="false">조리대</button>
+        <button class="btn" type="button" data-view="tall" aria-pressed="false">키큰장</button>
+        <button class="btn" type="button" data-view="plan" aria-pressed="false">평면</button>
+      </div>
+      <div class="hint"><span class="mouse">드래그 회전 · 휠 확대 · 우클릭 드래그 이동</span><span class="touch">한 손가락 회전 · 두 손가락 확대/이동</span></div>
+      <button class="pull" type="button" id="pullBtn" hidden>망장 꺼내보기</button>
+    </div>
+
+    <aside class="panel">
+      <fieldset class="schemes">
+        <legend>배치안</legend>
+        <div class="scheme-grid">
+          <label><input type="radio" name="scheme" id="s-base" value="base" checked><span><b>원안</b><small>도면 그대로</small></span></label>
+          <label><input type="radio" name="scheme" id="s-A" value="A"><span><b>A안 <em class="tag" style="font-style:normal">추천</em></b><small>쿡탑 옆 200 망장</small></span></label>
+          <label><input type="radio" name="scheme" id="s-B" value="B"><span><b>B안</b><small>쿡탑 아래 양념 서랍</small></span></label>
+          <label><input type="radio" name="scheme" id="s-C" value="C"><span><b>C안</b><small>슬림 식세기 + 150 망장</small></span></label>
+        </div>
+      </fieldset>
+      <p class="note" id="schemeNote"></p>
+      <div class="strips">
+        <div>
+          <p class="rail-h">오른쪽 벽 하부장 (위쪽 벽 → 코너)</p>
+          <div class="strip-row">
+            <div class="strip-label"><span>원안</span><span class="num">3,130</span></div>
+            <div id="stripBase"></div>
+          </div>
+        </div>
+        <div class="strip-row" id="rowSel" hidden>
+          <div class="strip-label"><span id="selName">A안</span><span class="num">3,130</span></div>
+          <div id="stripSel"></div>
+        </div>
+        <div class="axis"><span>↑ 위쪽 벽</span><span>코너 · 거실 쪽 ↓</span></div>
+      </div>
+      <div>
+        <p class="rail-h">보기</p>
+        <div class="toggles">
+          <label><input type="checkbox" id="t-labels" checked> 이름표</label>
+          <label><input type="checkbox" id="t-dims"> 치수</label>
+          <label><input type="checkbox" id="t-uppers" checked> 상부장</label>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="analysis" aria-labelledby="h-rack">
+    <div class="verdict">
+      <h2 id="h-rack">양념망장, 넣을 수 있어요</h2>
+      <p>오른쪽 벽 하부장은 벽부터 코너까지 쿡탑 730, 식세기 600, 개수대 1150으로 꽉 차 있어서 그대로는 자리가 없어요. 그런데 개수대 구간 1150이 도면 속 싱크볼(약 840)보다 넉넉해요. 개수대장을 900으로 줄이면 200이 남고, 이걸 쿡탑 바로 옆으로 옮기면 요리하다가 손만 뻗어 꺼내 쓰는 자리가 돼요.</p>
+      <div class="math"><div>개수대 구간 1150 = 개수대장 900 + 코너 필러 50 + <em>망장 200</em></div><div>→ 쿡탑 730 | <em>망장 200</em> | 식세기 600 | 개수대 900 | 필러 50</div></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>안</th><th>망장 자리</th><th>바꿔야 하는 것</th><th>쿡탑에서</th><th>판단</th></tr></thead>
+        <tbody>
+          <tr><td class="k">A</td><td>쿡탑 바로 옆, 폭 200<span class="sub">식세기와 쿡탑 사이</span></td><td>개수대장 1150 → 900 (싱크볼 860 이하)<span class="sub">식세기가 코너 쪽으로 200 이동, 개수대 중심 약 75 이동</span></td><td>바로 옆</td><td><span class="pill ok">추천</span><button class="row-go" type="button" data-go="A">3D로 보기</button></td></tr>
+          <tr><td class="k">B</td><td>쿡탑 아래 둘째 서랍, 폭 730<span class="sub">인덕션 바로 아래 첫 서랍은 얕아요</span></td><td>없음<span class="sub">서랍 안에 칸막이·병 정리대만 추가</span></td><td>바로 아래</td><td><span class="pill mid">공사 변경 없이</span><button class="row-go" type="button" data-go="B">3D로 보기</button></td></tr>
+          <tr><td class="k">C</td><td>쿡탑 바로 옆, 폭 150</td><td>식세기 60cm → 45cm 슬림형<span class="sub">개수대 1150은 그대로</span></td><td>바로 옆</td><td><span class="pill warn">식세기 용량 줄어듦</span><button class="row-go" type="button" data-go="C">3D로 보기</button></td></tr>
+          <tr><td class="k">D</td><td>식세기와 개수대 사이, 폭 200</td><td>개수대장 1150 → 900</td><td>약 600 떨어짐</td><td><span class="pill warn">A안보다 불리</span></td></tr>
+          <tr><td class="k">E</td><td>홈바나 가전장에 키큰 망장</td><td>키큰장 내부 구성</td><td>맞은편 약 2.1m</td><td><span class="pill mid">큰 병·여분 보관용</span></td></tr>
+          <tr><td class="k">F</td><td>쿡탑 구간 730을 쪼개기</td><td>인덕션 아래에 보통 600 이상 하부장이 필요해서, 벽 쪽 필러를 빼면 남는 폭이 100 남짓</td><td>—</td><td><span class="pill no">어려움</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cols">
+      <div>
+        <h3>시공사와 확인할 것</h3>
+        <ul>
+          <li><b>싱크볼 규격.</b> 도면의 볼은 약 <span class="num">840 × 500</span>으로 읽혀요. 860 이하 볼은 보통 900 하부장에 들어가지만, 고른 제품의 최소 하부장 폭을 확인하세요.</li>
+          <li><b>코너 필러.</b> A안은 개수대 쪽 필러 50을 따로 잡은 보수적인 치수예요. 코너장 쪽 필러만으로 문끼리 부딪히지 않는다면 개수대장을 950까지 키울 수 있어요.</li>
+          <li><b>수전·배수 위치.</b> A안에서는 개수대 중심이 코너 쪽으로 약 75 옮겨가요. 배수구와 급수 배관이 따라올 수 있는지 물어보세요.</li>
+          <li><b>파란 점선 박스.</b> 개수대 뒤쪽, 식세기 쪽에 파란 점선 X 박스가 있어요. 하부장 안에 들어가는 설비(정수기, 음식물처리기 등)라면 A안에서 식세기와 약 140 겹쳐요. 그 경우 설비를 개수대장 코너 쪽으로 옮기거나 D안처럼 순서를 바꿔야 해요.</li>
+          <li><b>망장 하드웨어.</b> 200 하부장이면 바스켓 안쪽 폭이 대략 130~140이에요(제품마다 달라요). 1.7L 간장병 같은 키 큰 병이 들어가게 단 높이를 조절할 수 있는지 확인하세요.</li>
+          <li><b>손잡이.</b> 망장, 식세기, 서랍 손잡이를 같은 방식(J형이나 푸시)으로 맞추면 앞면이 깔끔해요.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>도면에서 읽은 치수와 가정</h3>
+        <ul>
+          <li>축척은 도면의 <span class="num">1,850 · 2,480 · 700</span> 치수에 맞췄고, 나머지는 그 비율로 읽었어요. 오차는 ±20 안팎이에요.</li>
+          <li>키큰장 폭은 가전장 약 <span class="num">600</span>, 김치냉장고 약 <span class="num">735</span>, 냉장고 약 <span class="num">915</span>, 홈바 약 <span class="num">880</span>, 깊이는 벽 마감 포함 약 <span class="num">750</span>으로 잡았어요.</li>
+          <li>통로는 키큰장 앞에서 오른쪽 조리대까지 약 <span class="num">2,120</span>, 아래 조리대 끝까지 약 <span class="num">970</span>이에요.</li>
+          <li>높이는 도면에 없어서 흔히 쓰는 값을 넣었어요. 상판 <span class="num">850</span>, 상부장 아래 <span class="num">1,480</span>, 천장 <span class="num">2,300</span>.</li>
+          <li>도면 아래쪽은 벽이 끝나 있어서 거실·식당 쪽으로 열린 조리대로 그렸어요. 상부장은 오른쪽 벽 점선(벽에서 약 <span class="num">370</span>) 자리에만 넣었어요.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+  <footer>치수는 도면 이미지에서 읽은 값이라 실측과 다를 수 있어요. 제작 전에 현장 실측으로 확정하세요.</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+'use strict';
+const $ = s => document.querySelector(s);
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- plan data (mm). x: plan right, z: plan down, y: height ---------- */
+const C = {W:3570, RF:2870, ZB:2480, XB:1720, ZE:3130, TF:750, H:2300, CT:850, CTT:20, TOE:100, DT:18, UB:1480, UF:3200};
+const FACE_R = C.RF + 20, FACE_B = C.ZB + 20, CAB_TOP = C.CT - C.CTT;
+const SINK = {x0:2930, x1:3410, len:840, depth:220};
+
+const SCHEMES = {
+  base:{name:'원안', segs:[['cook',730],['dw',600],['sink',1150]], pull:null,
+    note:'도면 그대로예요. 쿡탑 730, 식세기 600, 개수대 1150이 벽부터 코너까지 꽉 차 있어서 망장 자리가 따로 없어요.'},
+  A:{name:'A안', segs:[['cook',730],['rack',200],['dw',600],['sink',900],['filler',50]], pull:'rack',
+    note:'개수대장을 1150에서 900으로 줄이고, 남는 200을 쿡탑 바로 옆 망장으로 써요. 식세기는 코너 쪽으로 200 밀리고 개수대 중심은 약 75 옮겨가요. 코너 쪽 필러 50은 보수적으로 잡은 값이에요.'},
+  B:{name:'B안', segs:[['cook',730],['dw',600],['sink',1150]], pull:'drawer',
+    note:'배치는 원안 그대로 두고, 쿡탑 아래 730 폭 서랍 중 둘째 서랍을 양념 서랍으로 써요. 바닥이 넓어 작은 병을 많이 세울 수 있지만, 키 큰 병은 서랍 높이를 확인해야 해요.'},
+  C:{name:'C안', segs:[['cook',730],['rack',150],['dw',450],['sink',1150]], pull:'rack',
+    note:'식세기를 45cm 슬림형으로 바꾸고 150 망장을 넣어요. 개수대 1150은 그대로지만 식세기 용량이 줄고, 150 망장에는 지름 9cm 안팎 병까지만 들어가요.'}
+};
+const SEG_NAME = {cook:'쿡탑', rack:'망장', dw:'식세기', sink:'개수대', filler:'', corner:'코너'};
+
+/* ---------- control rail: elevation strips ---------- */
+function fillStrip(el, key){
+  const segs = SCHEMES[key].segs.concat([['corner',650]]);
+  const base = {}; SCHEMES.base.segs.forEach(([k,w]) => base[k] = w);
+  const bar = document.createElement('div'); bar.className = 'bar';
+  const dims = document.createElement('div'); dims.className = 'dims';
+  for (const [k,w] of segs){
+    const s = document.createElement('div');
+    s.className = 'seg seg-' + k + (w < 320 ? ' narrow' : '');
+    s.style.flex = w + ' ' + w + ' 0';
+    if (SEG_NAME[k]) { const sp = document.createElement('span'); sp.textContent = SEG_NAME[k]; s.append(sp); }
+    s.title = (SEG_NAME[k] || '필러') + ' ' + w;
+    bar.append(s);
+    const d = document.createElement('div'); d.className = 'd'; d.style.flex = w + ' ' + w + ' 0';
+    d.textContent = k === 'filler' ? '' : String(w);
+    if (key !== 'base' && k !== 'corner' && k !== 'filler' && base[k] !== w) d.classList.add('chg');
+    dims.append(d);
+  }
+  el.replaceChildren(bar, dims);
+}
+fillStrip($('#stripBase'), 'base');
+
+/* ---------- 3D ---------- */
+const stage = $('#stage'), canvas = $('#gl'), labelLayer = $('#labels');
+if (!window.THREE || !THREE.OrbitControls){ fail('3D 라이브러리를 불러오지 못했어요. 새로고침해 보세요.'); wireUIOnly(); return; }
+let renderer;
+try { renderer = new THREE.WebGLRenderer({canvas, antialias:true}); }
+catch (e) { fail('이 브라우저에서는 3D를 그릴 수 없어요. 아래 배치안 비교는 그대로 볼 수 있어요.'); wireUIOnly(); return; }
+function fail(msg){ const d = document.createElement('div'); d.className = 'nogl'; d.textContent = msg; stage.append(d); }
+
+if (THREE.ColorManagement) THREE.ColorManagement.legacyMode = false;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.98;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, 1.6, 0.05, 80);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.09;
+controls.minDistance = 0.6; controls.maxDistance = 40; controls.maxPolarAngle = Math.PI * 0.497;
+controls.screenSpacePanning = true;
+
+/* helpers */
+const mm = v => v / 1000;
+function box(x0,x1,y0,y1,z0,z1,mat,parent){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(mm(x1-x0), mm(y1-y0), mm(z1-z0)), mat);
+  m.position.set(mm((x0+x1)/2), mm((y0+y1)/2), mm((z0+z1)/2));
+  m.castShadow = true; m.receiveShadow = true;
+  (parent || scene).add(m); return m;
+}
+function cyl(r0,r1,h,x,yBottom,z,mat,parent,seg){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(mm(r0), mm(r1), mm(h), seg || 24), mat);
+  m.position.set(mm(x), mm(yBottom + h/2), mm(z));
+  m.castShadow = true; m.receiveShadow = true;
+  (parent || scene).add(m); return m;
+}
+function canvasTex(w, h, draw, repeat){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.encoding = THREE.sRGBEncoding;
+  t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  if (repeat){ t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat[0], repeat[1]); }
+  return t;
+}
+function rng(seed){ let s = seed >>> 0; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296); }
+
+/* textures */
+const FLOOR = {x0:-150, x1:C.W+150, z0:-150, z1:4900};
+const floorTex = canvasTex(256, 256, (g,w,h) => {
+  g.fillStyle = '#d8d4cb'; g.fillRect(0,0,w,h);
+  const r = rng(7);
+  for (let i = 0; i < 1600; i++){ g.fillStyle = r() < .5 ? 'rgba(255,255,255,.05)' : 'rgba(90,80,70,.05)'; g.fillRect(r()*w, r()*h, 2, 2); }
+  g.strokeStyle = '#bcb6ab'; g.lineWidth = 3; g.strokeRect(0,0,w,h);
+}, [(FLOOR.x1-FLOOR.x0)/600, (FLOOR.z1-FLOOR.z0)/600]);
+floorTex.offset.set(-0.25, 0.25);
+function tileTex(lenMm){
+  return canvasTex(256, 128, (g,w,h) => {
+    g.fillStyle = '#f2f2ef'; g.fillRect(0,0,w,h);
+    g.strokeStyle = '#d4d5d0'; g.lineWidth = 2; g.strokeRect(0,0,w,h);
+  }, [lenMm/600, (1480-C.CT)/300]);
+}
+const cookTex = canvasTex(416, 464, (g,w,h) => {
+  const s = w / 520;
+  g.fillStyle = '#121314'; g.fillRect(0,0,w,h);
+  g.strokeStyle = '#33363a'; g.lineWidth = 4; g.strokeRect(2,2,w-4,h-4);
+  const burners = [[261,171,97],[169,405,72],[385,409,72]];
+  for (const [x,z,r] of burners){
+    g.strokeStyle = '#55595d'; g.lineWidth = 2.5; g.beginPath(); g.arc(x*s, z*s, r*s, 0, Math.PI*2); g.stroke();
+    g.lineWidth = 1.2; g.beginPath(); g.arc(x*s, z*s, r*s*0.55, 0, Math.PI*2); g.stroke();
+  }
+  g.fillStyle = '#5b5f63';
+  for (let i = 0; i < 4; i++){ g.beginPath(); g.arc(28*s, (60 + i*34)*s, 6*s, 0, Math.PI*2); g.fill(); }
+});
+
+/* materials */
+const M = (color, rough, metal) => new THREE.MeshStandardMaterial({color, roughness: rough == null ? .8 : rough, metalness: metal || 0});
+const mat = {
+  floor: new THREE.MeshStandardMaterial({map:floorTex, roughness:.85}),
+  wall: M(0xe9e9e4, .95),
+  carcass: M(0x8e928d, .9),
+  carcassLight: M(0xbfc2bc, .85),
+  door: M(0xeceee9, .6),
+  groove: M(0x3b3f3d, .5, .3),
+  toe: M(0x5d615e, .8),
+  tall: M(0xcdb08a, .6),
+  tallIn: M(0x8f7759, .85),
+  niche: M(0xe9e3d8, .8),
+  counter: M(0xd2cfc8, .3),
+  steel: M(0xb7bcc0, .34, .4),
+  black: M(0x1c1d1f, .35, .1),
+  graphite: M(0x3a3d40, .45, .2),
+  fridge: M(0xdfe0de, .36, .2),
+  kimchi: M(0xd7d0c5, .4, .12),
+  seam: M(0x5f6463, .6),
+  white: M(0xf4f3ef, .5),
+  wire: M(0xc9ced2, .3, .45),
+  accent: M(0xb23e2a, .55)
+};
+const glassMats = [mat.black, mat.black, new THREE.MeshStandardMaterial({map:cookTex, roughness:.14, metalness:.2}), mat.black, mat.black, mat.black];
+
+/* lights */
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a5, .52));
+const sun = new THREE.DirectionalLight(0xfff1df, 1.45);
+sun.position.set(-0.6, 6.2, 5.2); sun.target.position.set(1.8, 0, 1.6);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, {left:-4.2, right:4.2, top:4.2, bottom:-4.2, near:1, far:22});
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+scene.add(sun, sun.target);
+const fillLight = new THREE.DirectionalLight(0xe4ecff, .32); fillLight.position.set(6, 3, -2); scene.add(fillLight);
+
+/* ---------- static build ---------- */
+const walls = {};
+(function buildRoom(){
+  box(FLOOR.x0, FLOOR.x1, -20, 0, FLOOR.z0, FLOOR.z1, mat.floor);
+  walls.top = box(-150, C.W+150, 0, C.H, -150, 0, mat.wall);
+  walls.right = box(C.W, C.W+150, 0, C.H, 0, C.ZE, mat.wall);
+  walls.left = box(-150, 0, 0, C.H, 0, C.ZE, mat.wall);
+  // backsplash tile on the right wall and on the top wall above the counter
+  const hTile = 1480 - C.CT;
+  const pr = new THREE.Mesh(new THREE.PlaneGeometry(mm(C.ZE), mm(hTile)), new THREE.MeshStandardMaterial({map:tileTex(C.ZE), roughness:.35}));
+  pr.rotation.y = -Math.PI/2; pr.position.set(mm(C.W - 1), mm(C.CT + hTile/2), mm(C.ZE/2)); pr.receiveShadow = true; scene.add(pr);
+  const pt = new THREE.Mesh(new THREE.PlaneGeometry(mm(C.W - C.RF), mm(hTile)), new THREE.MeshStandardMaterial({map:tileTex(C.W - C.RF), roughness:.35}));
+  pt.position.set(mm((C.RF + C.W)/2), mm(C.CT + hTile/2), mm(1)); pt.receiveShadow = true; scene.add(pt);
+  walls.tileR = pr; walls.tileT = pt;
+})();
+
+/* tall column (left wall) */
+(function buildTall(){
+  const g = new THREE.Group(); scene.add(g);
+  const T = C.TF, DT = C.DT;
+  const fill = (z, y0, y1) => box(100, T - DT, y0, y1, z[0], z[1], mat.tallIn, g);
+  const front = (z, y0, y1, m) => box(T - DT, T, y0 + 1.5, y1 - 1.5, z[0] + 1.5, z[1] - 1.5, m || mat.tall, g);
+  const split = (z, y0, y1) => { const zm = (z[0]+z[1])/2; front([z[0], zm], y0, y1); front([zm, z[1]], y0, y1); };
+  const plinth = z => box(100, T - 50, 0, C.TOE, z[0], z[1], mat.toe, g);
+  box(0, 100, 0, C.H, 0, C.ZE, mat.tallIn, g);
+  [0, 600, 1335, 2250].forEach(b => box(0, T, 0, C.H, Math.max(0, b - 9), b + 9, mat.tall, g));
+  box(0, T, 0, C.H, C.ZE - 18, C.ZE, mat.tall, g);
+
+  // 가전장: drawers, rice cooker shelf, microwave, upper door
+  const b1 = [9, 591];
+  plinth(b1); fill(b1, C.TOE, 850); front(b1, C.TOE, 475); front(b1, 475, 850);
+  box(100, 106, 850, 1500, b1[0], b1[1], mat.niche, g);
+  box(100, T - 4, 850, 868, b1[0], b1[1], mat.tall, g);
+  cyl(135, 140, 240, 470, 868, 300, mat.white, g, 32);
+  cyl(120, 132, 22, 470, 1108, 300, mat.graphite, g, 32);
+  box(100, T - 4, 1180, 1198, b1[0], b1[1], mat.tall, g);
+  box(300, 720, 1198, 1478, 60, 540, mat.graphite, g);
+  box(720, 726, 1215, 1462, 75, 400, mat.black, g);
+  box(720, 726, 1215, 1462, 410, 525, mat.carcassLight, g);
+  fill(b1, 1500, C.H); front(b1, 1500, C.H);
+
+  // 김치냉장고
+  const b2 = [609, 1326];
+  box(40, T - 14, 0, 1850, 619, 1316, mat.seam, g);
+  const kz = [619, 1316], km = (kz[0] + kz[1]) / 2;
+  const kf = (z0, z1, y0, y1) => box(T - 14, T - 1, y0 + 2, y1 - 2, z0 + 2, z1 - 2, mat.kimchi, g);
+  kf(kz[0], km, 1150, 1850); kf(km, kz[1], 1150, 1850); kf(kz[0], kz[1], 590, 1150); kf(kz[0], kz[1], 10, 590);
+  fill(b2, 1850, C.H); front(b2, 1870, C.H);
+
+  // 냉장고
+  const b3 = [1344, 2241];
+  box(30, T - 14, 0, 1853, 1354, 2231, mat.seam, g);
+  const fz = [1354, 2231], fm = (fz[0] + fz[1]) / 2;
+  const ff = (z0, z1, y0, y1) => box(T - 14, T + 1, y0 + 2, y1 - 2, z0 + 2, z1 - 2, mat.fridge, g);
+  ff(fz[0], fm, 950, 1853); ff(fm, fz[1], 950, 1853); ff(fz[0], fm, 15, 945); ff(fm, fz[1], 15, 945);
+  fill(b3, 1853, C.H); front(b3, 1873, C.H);
+
+  // 홈바: lower doors, open niche with a counter, upper doors
+  const b4 = [2259, 3112];
+  plinth(b4); fill(b4, C.TOE, 850); split(b4, C.TOE, 850);
+  box(100, T + 10, 850, 872, b4[0], b4[1], mat.counter, g);
+  box(100, 106, 872, 1400, b4[0], b4[1], mat.niche, g);
+  box(140, 520, 872, 1200, 2330, 2580, mat.black, g);
+  box(500, 524, 1050, 1170, 2380, 2530, mat.graphite, g);
+  cyl(38, 34, 95, 430, 872, 2690, mat.white, g);
+  cyl(38, 34, 95, 430, 872, 2790, mat.white, g);
+  fill(b4, 1400, C.H); split(b4, 1400, C.H);
+})();
+
+/* upper cabinets on the right wall */
+const uppers = new THREE.Group(); scene.add(uppers);
+(function buildUppers(){
+  const g = uppers, F = C.UF, DT = C.DT;
+  box(F + DT, C.W, C.UB + 18, C.H, 0, C.ZE - 18, mat.carcassLight, g);
+  box(F + DT, C.W, C.UB, C.UB + 18, 0, C.ZE - 18, mat.door, g);
+  box(F, C.W, C.UB, C.H, C.ZE - 18, C.ZE, mat.door, g);
+  box(F - 4, F + DT, C.UB, C.UB + 46, 30, 700, mat.black, g); // hood visor
+  const uf = (z0, z1, y0) => {
+    box(F, F + DT, y0 + 1.5, C.H - 1.5, z0 + 1.5, z1 - 1.5, mat.door, g);
+    box(F - 0.6, F + 2, y0 + 8, y0 + 16, z0 + 1.5, z1 - 1.5, mat.groove, g);
+  };
+  uf(0, 730, C.UB + 48);
+  [[730,1030],[1030,1330],[1330,1905],[1905,2480],[2480,C.ZE-18]].forEach(([a,b]) => uf(a, b, C.UB));
+})();
+
+/* bottom run (peninsula), corner, right-run plinth, cooktop, robot */
+(function buildBottom(){
+  const g = new THREE.Group(); scene.add(g);
+  const DT = C.DT, back = C.ZE - 18;
+  box(C.XB - 20, C.RF, CAB_TOP, C.CT, C.ZB, C.ZE + 20, mat.counter, g);
+  box(C.XB, C.W, 0, CAB_TOP, back, C.ZE, mat.door, g);            // finished back facing the living room
+  box(C.XB, C.XB + DT, 0, CAB_TOP, FACE_B, back, mat.door, g);    // end panel
+  // robot vacuum niche
+  box(C.XB + DT, 2220, 550, CAB_TOP, FACE_B + DT, back, mat.carcass, g);
+  box(C.XB + DT, 2220, 0, 550, 3050, back, mat.niche, g);
+  box(2220, 2238, 0, CAB_TOP, FACE_B + DT, back, mat.niche, g);
+  bFront(C.XB + DT, 2220, 550, CAB_TOP, g);
+  box(1820, 2140, 0, 430, 2840, 3050, mat.graphite, g);
+  box(1840, 2120, 430, 436, 2860, 3030, mat.white, g);
+  cyl(175, 175, 92, 1980, 0, 2650, mat.white, g, 40);
+  cyl(40, 40, 22, 1980, 92, 2700, mat.graphite, g);
+  // cabinet + filler
+  box(2238, 2890, C.TOE, CAB_TOP, FACE_B + DT, back, mat.carcass, g);
+  bFront(2238, 2820, C.TOE, CAB_TOP, g);
+  box(2820, 2890, C.TOE, CAB_TOP, FACE_B, FACE_B + DT, mat.door, g);
+  box(2238, 2940, 0, C.TOE, FACE_B + 50, back, mat.toe, g);
+  // corner block and right-run plinth
+  box(2890, C.W - 20, C.TOE, CAB_TOP, C.ZB, back, mat.carcass, g);
+  box(FACE_R + 50, C.W - 20, 0, C.TOE, 0, back, mat.toe, g);
+  // induction cooktop (plan: x 2950–3470, z 80–660)
+  box(2950, 3470, C.CT, C.CT + 6, 80, 660, glassMats, g);
+  // blue dashed box from the drawing (behind the sink, purpose unknown)
+  const y = mm(C.CT + 2), x0 = mm(3258), x1 = mm(C.W - 6), z0 = mm(1392), z1 = mm(1987);
+  const pts = [[x0,z0],[x1,z0],[x1,z0],[x1,z1],[x1,z1],[x0,z1],[x0,z1],[x0,z0],[x0,z0],[x1,z1],[x1,z0],[x0,z1]].map(([a,b]) => new THREE.Vector3(a, y, b));
+  const memo = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({color:0x2c66d2, dashSize:.03, gapSize:.02}));
+  memo.computeLineDistances(); g.add(memo);
+})();
+function bFront(x0, x1, y0, y1, g){
+  box(x0 + 1.5, x1 - 1.5, y0 + 1.5, y1 - 1.5, FACE_B, FACE_B + C.DT, mat.door, g);
+  box(x0 + 1.5, x1 - 1.5, y1 - 22, y1 - 13, FACE_B - 0.6, FACE_B + 2, mat.groove, g);
+}
+
+/* ---------- right run (changes with the scheme) ---------- */
+const BOTTLES = [
+  {c:0x3b2417, cap:0xc23b2c}, {c:0xb8862f, cap:0x2f6b3a}, {c:0xe8e0c4, cap:0xd2a32c}, {c:0x8e2b1f, tub:true},
+  {c:0xf1efe9, cap:0x2c5fa8}, {c:0x56733a, cap:0xf1efe9}, {c:0x2a2a2a, cap:0xc23b2c}, {c:0xd9a441, cap:0xffffff}
+];
+const bMats = new Map();
+const bMat = hex => { if (!bMats.has(hex)) bMats.set(hex, new THREE.MeshStandardMaterial({color:hex, roughness:.32})); return bMats.get(hex); };
+function bottle(g, x, y, z, r, h, i){
+  const b = BOTTLES[i % BOTTLES.length];
+  if (b.tub){ box(x - r, x + r, y, y + h * .55, z - r, z + r, bMat(b.c), g); box(x - r, x + r, y + h * .55, y + h * .55 + 14, z - r, z + r, bMat(0xf3efe6), g); return; }
+  cyl(r, r, h * .72, x, y, z, bMat(b.c), g, 18);
+  cyl(r * .42, r, h * .12, x, y + h * .72, z, bMat(b.c), g, 18);
+  cyl(r * .42, r * .42, h * .14, x, y + h * .84, z, bMat(b.cap), g, 14);
+}
+function rFront(z0, z1, y0, y1, g, grooveMat){
+  box(FACE_R, FACE_R + C.DT, y0 + 1.5, y1 - 1.5, z0 + 1.5, z1 - 1.5, mat.door, g);
+  box(FACE_R - 0.6, FACE_R + 2, y1 - 22, y1 - 13, z0 + 1.5, z1 - 1.5, grooveMat || mat.groove, g);
+}
+
+let rr = null; // {group, pull, pullDist, info}
+function disposeTree(o){ o.traverse(n => { if (n.geometry) n.geometry.dispose(); }); }
+function buildRightRun(key){
+  if (rr){ scene.remove(rr.group); disposeTree(rr.group); }
+  const g = new THREE.Group(); scene.add(g);
+  const DT = C.DT, cx0 = FACE_R + DT, cx1 = C.W - 20;
+  const info = {}; let pull = null, pullDist = 0, z = 0;
+  for (const [k, w] of SCHEMES[key].segs){
+    const z0 = z, z1 = z + w; z = z1; info[k] = [z0, z1];
+    if (k === 'filler'){ box(FACE_R, FACE_R + DT, C.TOE, CAB_TOP, z0, z1, mat.door, g); box(cx0, cx1, C.TOE, CAB_TOP, z0, z1, mat.carcass, g); continue; }
+    if (k === 'sink'){ box(cx0, cx1, C.TOE, CAB_TOP - SINK.depth - 30, z0 + 1, z1 - 1, mat.carcass, g); }
+    else box(cx0, cx1, C.TOE, CAB_TOP, z0 + 1, z1 - 1, mat.carcass, g);
+    if (k === 'cook'){
+      const rows = [[C.TOE, 380], [380, 660], [660, CAB_TOP]];
+      rows.forEach(([y0, y1], i) => {
+        if (key === 'B' && i === 1){ pull = buildDrawer(z0, z1, y0, y1); g.add(pull); pullDist = .42; }
+        else rFront(z0, z1, y0, y1, g);
+      });
+    } else if (k === 'dw'){
+      rFront(z0, z1, C.TOE, CAB_TOP, g);
+      box(FACE_R - 0.6, FACE_R + 2, C.TOE + 40, C.TOE + 46, z1 - 70, z1 - 40, mat.graphite, g);
+    } else if (k === 'sink'){
+      if (w >= 800){ const zm = (z0 + z1) / 2; rFront(z0, zm, C.TOE, CAB_TOP, g); rFront(zm, z1, C.TOE, CAB_TOP, g); }
+      else rFront(z0, z1, C.TOE, CAB_TOP, g);
+    } else if (k === 'rack'){
+      pull = buildRack(z0, z1); g.add(pull); pullDist = .46;
+    }
+  }
+  // countertop with the sink opening
+  const zc = (info.sink[0] + info.sink[1]) / 2, bz0 = zc - SINK.len / 2, bz1 = zc + SINK.len / 2;
+  info.sinkCenter = zc;
+  box(C.RF, C.W, CAB_TOP, C.CT, 0, bz0, mat.counter, g);
+  box(C.RF, C.W, CAB_TOP, C.CT, bz1, C.ZE + 20, mat.counter, g);
+  box(C.RF, SINK.x0, CAB_TOP, C.CT, bz0, bz1, mat.counter, g);
+  box(SINK.x1, C.W, CAB_TOP, C.CT, bz0, bz1, mat.counter, g);
+  const yb = CAB_TOP - SINK.depth;
+  box(SINK.x0, SINK.x1, yb - 2, yb, bz0, bz1, mat.steel, g);
+  box(SINK.x0, SINK.x0 + 2, yb, CAB_TOP, bz0, bz1, mat.steel, g);
+  box(SINK.x1 - 2, SINK.x1, yb, CAB_TOP, bz0, bz1, mat.steel, g);
+  box(SINK.x0, SINK.x1, yb, CAB_TOP, bz0, bz0 + 2, mat.steel, g);
+  box(SINK.x0, SINK.x1, yb, CAB_TOP, bz1 - 2, bz1, mat.steel, g);
+  cyl(45, 45, 3, 3170, yb, zc + 200, mat.graphite, g);
+  // faucet
+  cyl(26, 26, 30, 3490, C.CT, zc, mat.steel, g);
+  cyl(15, 15, 360, 3490, C.CT + 30, zc, mat.steel, g);
+  const spout = cyl(13, 13, 240, 0, 0, 0, mat.steel, g);
+  spout.rotation.z = Math.PI / 2; spout.position.set(mm(3375), mm(C.CT + 390), mm(zc));
+  cyl(15, 15, 70, 3260, C.CT + 320, zc, mat.steel, g);
+  const lever = box(3478, 3502, C.CT + 160, C.CT + 172, zc + 15, zc + 85, mat.steel, g);
+  rr = {group:g, pull, pullDist, info};
+}
+function buildRack(z0, z1){
+  const g = new THREE.Group();
+  const DT = C.DT, w = z1 - z0;
+  box(FACE_R, FACE_R + DT, C.TOE + 1.5, CAB_TOP - 1.5, z0 + 1.5, z1 - 1.5, mat.door, g);
+  box(FACE_R - 0.6, FACE_R + 2, CAB_TOP - 22, CAB_TOP - 13, z0 + 1.5, z1 - 1.5, mat.accent, g);
+  const iz0 = z0 + DT + 8, iz1 = z1 - DT - 8, xa = FACE_R + DT + 4, xb = xa + 470;
+  const rod = 5;
+  for (const x of [xa, xb - rod]) for (const zz of [iz0, iz1 - rod]) box(x, x + rod, C.TOE + 20, CAB_TOP - 40, zz, zz + rod, mat.wire, g);
+  const r = Math.min(42, (iz1 - iz0 - 12) / 2), zmid = (iz0 + iz1) / 2;
+  const R = rng(w * 31 + 7); let n = 0;
+  [C.TOE + 30, 360, 590].forEach((ys, tier) => {
+    box(xa, xb, ys, ys + 3, iz0, iz1, mat.wire, g);
+    for (const zz of [iz0, iz1 - rod]) box(xa, xb, ys + 55, ys + 59, zz, zz + rod, mat.wire, g);
+    box(xa, xa + rod, ys + 55, ys + 59, iz0, iz1, mat.wire, g);
+    const pitch = 2 * r + 16, count = Math.floor((xb - xa - 20) / pitch);
+    const maxH = tier === 2 ? (CAB_TOP - 50 - ys) : 210;
+    for (let i = 0; i < count; i++){
+      const h = Math.min(maxH, 150 + R() * 70);
+      bottle(g, xa + 14 + r + i * pitch, ys + 3, zmid, r, h, n++ + tier);
+    }
+  });
+  return g;
+}
+function buildDrawer(z0, z1, y0, y1){
+  const g = new THREE.Group();
+  const DT = C.DT;
+  box(FACE_R, FACE_R + DT, y0 + 1.5, y1 - 1.5, z0 + 1.5, z1 - 1.5, mat.door, g);
+  box(FACE_R - 0.6, FACE_R + 2, y1 - 22, y1 - 13, z0 + 1.5, z1 - 1.5, mat.accent, g);
+  const xa = FACE_R + DT, xb = xa + 470, za = z0 + 30, zb = z1 - 30, yb = y0 + 14, yt = y1 - 30;
+  box(xa, xb, yb, yb + 10, za, zb, mat.white, g);
+  box(xa, xb, yb, yt, za, za + 12, mat.white, g);
+  box(xa, xb, yb, yt, zb - 12, zb, mat.white, g);
+  box(xb - 12, xb, yb, yt, za, zb, mat.white, g);
+  const r = 36, pitch = 2 * r + 14, R = rng(99); let n = 0;
+  const nz = Math.floor((zb - za - 30) / pitch), nx = Math.floor((xb - xa - 30) / pitch);
+  const zs = za + 12 + ((zb - za - 24) - nz * pitch) / 2 + pitch / 2;
+  for (let ix = 0; ix < nx; ix++) for (let iz = 0; iz < nz; iz++){
+    bottle(g, xa + 20 + r + ix * pitch, yb + 10, zs + iz * pitch, r, Math.min(yt - yb - 10, 140 + R() * 90), n++);
+  }
+  return g;
+}
+
+/* ---------- labels and floor dimensions ---------- */
+const dimsGroup = new THREE.Group(); scene.add(dimsGroup);
+const dimLineMat = new THREE.LineBasicMaterial({color:0x48504c});
+let labels = [];
+function dimLine(a, b, axis, ticks){
+  // axis: 'x' or 'z' — line along that axis on the floor; ticks at given positions
+  const y = mm(4), pts = [], T = 60;
+  if (axis === 'z'){ const x = mm(a); pts.push(new THREE.Vector3(x, y, mm(ticks[0])), new THREE.Vector3(x, y, mm(ticks[ticks.length-1])));
+    ticks.forEach(t => pts.push(new THREE.Vector3(mm(a - T), y, mm(t)), new THREE.Vector3(mm(a + T), y, mm(t)))); }
+  else { const zz = mm(a); pts.push(new THREE.Vector3(mm(ticks[0]), y, zz), new THREE.Vector3(mm(ticks[ticks.length-1]), y, zz));
+    ticks.forEach(t => pts.push(new THREE.Vector3(mm(t), y, mm(a - T)), new THREE.Vector3(mm(t), y, mm(a + T)))); }
+  dimsGroup.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), dimLineMat));
+}
+function rebuildDims(key){
+  dimsGroup.children.slice().forEach(c => { dimsGroup.remove(c); c.geometry.dispose(); });
+  const segs = SCHEMES[key].segs, t = [0]; let z = 0;
+  segs.forEach(([, w]) => { z += w; t.push(z); });
+  dimLine(C.RF - 150, 0, 'z', t);
+  dimLine(C.ZE + 200, 0, 'x', [C.XB, C.W]);
+  dimLine(C.XB - 160, 0, 'z', [C.ZB, C.ZE]);
+  dimLine(1750, 0, 'x', [C.TF, FACE_R]);
+  dimLine(2800, 0, 'x', [C.TF, C.XB]);
+}
+function makeLabels(key){
+  const L = [];
+  const add = (text, pos, kind, extra) => L.push(Object.assign({text, pos, kind: kind || 'item', group:'labels'}, extra || {}));
+  const dim = (text, pos) => L.push({text, pos, kind:'dim', group:'dims'});
+  add('가전장 · 전자레인지+밥솥', [C.TF + 15, 1560, 300]);
+  add('김치냉장고', [C.TF + 15, 1250, 968]);
+  add('냉장고', [C.TF + 15, 1250, 1792]);
+  add('홈바', [C.TF + 25, 1260, 2690]);
+  add('인덕션', [3210, C.CT + 20, 370]);
+  add('후드', [C.UF - 15, C.UB + 22, 365], 'item', {needsUppers:true});
+  add('직배수 로봇청소기', [1980, 600, FACE_B - 5], 'memo');
+  add('코너장', [2530, 600, FACE_B - 5]);
+  add('파란 점선 박스', [3414, C.CT + 10, 1690], 'memo');
+  const info = rr.info;
+  if (info.dw) add(key === 'C' ? '슬림 식세기 45cm' : '식세기', [FACE_R - 5, 520, (info.dw[0] + info.dw[1]) / 2]);
+  add('개수대', [FACE_R - 5, 520, info.sinkCenter]);
+  if (info.rack) add('양념망장 ' + (info.rack[1] - info.rack[0]), [C.RF - 15, CAB_TOP - 20, (info.rack[0] + info.rack[1]) / 2], 'rack', {follow:true});
+  if (key === 'B') add('양념 서랍', [C.RF - 15, 640, (info.cook[0] + info.cook[1]) / 2], 'rack', {follow:true});
+  let z = 0;
+  SCHEMES[key].segs.forEach(([k, w]) => { if (k !== 'filler') dim(String(w), [C.RF - 150, 6, z + w / 2]); z += w; });
+  dim('1,850', [(C.XB + C.W) / 2, 6, C.ZE + 200]);
+  dim('650', [C.XB - 160, 6, (C.ZB + C.ZE) / 2]);
+  dim('통로 약 2,120', [(C.TF + FACE_R) / 2, 6, 1750]);
+  dim('약 970', [(C.TF + C.XB) / 2, 6, 2800]);
+  labelLayer.replaceChildren();
+  for (const l of L){
+    const el = document.createElement('div'); el.className = 'chip ' + l.kind; el.hidden = true;
+    el.append(document.createElement('i'), document.createTextNode(l.text));
+    labelLayer.append(el); l.el = el; l.w = 0; l.h = 0;
+  }
+  labels = L;
+}
+
+/* ---------- views ---------- */
+const VIEWS = {
+  overview: () => camera.aspect >= 1.15 ? {pos:[1.85, 4.7, 6.1], tgt:[1.85, 0.55, 1.45], fov:42} : {pos:[1.85, 6.2, 7.4], tgt:[1.85, 0.5, 1.4], fov:42},
+  counter: () => camera.aspect >= 1.15 ? {pos:[1.2, 2.05, 2.15], tgt:[3.05, 0.68, 1.0], fov:42} : {pos:[1.0, 2.5, 3.2], tgt:[3.0, 0.7, 0.95], fov:42},
+  tall: () => camera.aspect >= 1.15 ? {pos:[2.75, 1.6, 1.65], tgt:[0.45, 1.05, 1.58], fov:42} : {pos:[2.9, 1.9, 3.6], tgt:[0.4, 1.0, 1.4], fov:42},
+  plan: () => {
+    const fov = 14, t = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+    const h = Math.max(4.1 / 2 / t, 4.3 / 2 / (t * camera.aspect)) + 2.3;
+    return {pos:[1.78, h, 1.67], tgt:[1.78, 0, 1.66], fov};
+  }
+};
+let currentView = 'overview', tween = null, dirty = true;
+function flyTo(name, instant){
+  currentView = name;
+  document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+  const v = VIEWS[name]();
+  if (name === 'plan' && toggles.uppers.checked){ toggles.uppers.checked = false; applyToggles(); }
+  if (instant || reduceMotion){ camera.position.set(...v.pos); controls.target.set(...v.tgt); camera.fov = v.fov; camera.updateProjectionMatrix(); controls.update(); dirty = true; return; }
+  tween = {t0:performance.now(), dur:950, p0:camera.position.clone(), q0:controls.target.clone(), p1:new THREE.Vector3(...v.pos), q1:new THREE.Vector3(...v.tgt), f0:camera.fov, f1:v.fov};
+}
+controls.addEventListener('start', () => { tween = null; });
+
+/* ---------- UI wiring ---------- */
+const toggles = {labels:$('#t-labels'), dims:$('#t-dims'), uppers:$('#t-uppers')};
+function applyToggles(){ uppers.visible = toggles.uppers.checked; dimsGroup.visible = toggles.dims.checked; dirty = true; }
+Object.values(toggles).forEach(t => t.addEventListener('change', applyToggles));
+
+const pullBtn = $('#pullBtn');
+let pullT = 0, pullTarget = 0, scheme = 'base';
+function updatePullBtn(){
+  const p = SCHEMES[scheme].pull;
+  pullBtn.hidden = !p;
+  if (!p) return;
+  const open = pullTarget > .5;
+  pullBtn.textContent = p === 'rack' ? (open ? '망장 닫기' : '망장 꺼내보기') : (open ? '서랍 닫기' : '양념 서랍 열기');
+  pullBtn.setAttribute('aria-pressed', String(open));
+}
+pullBtn.addEventListener('click', () => { pullTarget = pullTarget > .5 ? 0 : 1; updatePullBtn(); });
+
+function setScheme(key, fromUser){
+  scheme = key;
+  const radio = document.getElementById('s-' + key); if (radio) radio.checked = true;
+  buildRightRun(key); rebuildDims(key); makeLabels(key); applyToggles();
+  $('#schemeNote').textContent = SCHEMES[key].note;
+  const row = $('#rowSel'); row.hidden = key === 'base';
+  if (key !== 'base'){ $('#selName').textContent = SCHEMES[key].name; fillStrip($('#stripSel'), key); }
+  pullT = 0; pullTarget = 0; updatePullBtn();
+  if (fromUser && SCHEMES[key].pull){
+    if (currentView !== 'counter') flyTo('counter');
+    setTimeout(() => { if (scheme === key){ pullTarget = 1; updatePullBtn(); } }, reduceMotion ? 0 : 750);
+  }
+  dirty = true;
+}
+document.querySelectorAll('input[name="scheme"]').forEach(r => r.addEventListener('change', () => { if (r.checked) setScheme(r.value, true); }));
+document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => flyTo(b.dataset.view)));
+document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {
+  setScheme(b.dataset.go, true);
+  stage.scrollIntoView({behavior: reduceMotion ? 'auto' : 'smooth', block:'center'});
+}));
+
+/* theme-aware stage background */
+function applyBg(){ const c = getComputedStyle(document.documentElement).getPropertyValue('--stage').trim() || '#e3e7e3'; scene.background = new THREE.Color(c); dirty = true; }
+applyBg();
+if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyBg);
+new MutationObserver(applyBg).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+
+/* resize */
+function resize(){
+  const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); dirty = true;
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+
+/* render loop */
+const v3 = new THREE.Vector3(), dir = new THREE.Vector3();
+const ray = new THREE.Raycaster(); ray.params.Line.threshold = 0; ray.params.Points.threshold = 0;
+let occluders = [];
+function updateWalls(){
+  const p = camera.position;
+  walls.top.visible = walls.tileT.visible = p.z > 0;
+  walls.right.visible = walls.tileR.visible = p.x < mm(C.W);
+  walls.left.visible = p.x > 0;
+}
+function updateLabels(){
+  const w = stage.clientWidth, h = stage.clientHeight;
+  occluders = []; scene.traverseVisible(o => { if (o.isMesh) occluders.push(o); });
+  for (const l of labels){
+    const on = (l.group === 'dims' ? toggles.dims.checked : toggles.labels.checked) && (!l.needsUppers || toggles.uppers.checked);
+    if (!on){ l.el.hidden = true; continue; }
+    v3.set(mm(l.pos[0]), mm(l.pos[1]), mm(l.pos[2]));
+    if (l.follow && rr.pull) v3.x += rr.pull.position.x;
+    if (l.kind !== 'dim'){
+      dir.subVectors(v3, camera.position); const dist = dir.length(); dir.divideScalar(dist);
+      ray.set(camera.position, dir); ray.near = 0; ray.far = Math.max(0, dist - 0.03);
+      if (ray.intersectObjects(occluders, false).length){ l.el.hidden = true; continue; }
+    }
+    v3.applyMatrix4(camera.matrixWorldInverse);
+    if (v3.z > -camera.near){ l.el.hidden = true; continue; }
+    v3.applyMatrix4(camera.projectionMatrix);
+    if (Math.abs(v3.x) > 1.02 || Math.abs(v3.y) > 1.02){ l.el.hidden = true; continue; }
+    l.el.hidden = false;
+    const px = (v3.x + 1) / 2 * w, py = (1 - v3.y) / 2 * h;
+    l.el.style.transform = 'translate(' + px.toFixed(1) + 'px,' + py.toFixed(1) + 'px) translate(-50%,' + (l.kind === 'dim' ? '-50%' : '-110%') + ')';
+  }
+}
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+function tick(now){
+  requestAnimationFrame(tick);
+  let changed = false;
+  if (tween){
+    const k = Math.min(1, (now - tween.t0) / tween.dur), e = ease(k);
+    camera.position.lerpVectors(tween.p0, tween.p1, e); controls.target.lerpVectors(tween.q0, tween.q1, e);
+    camera.fov = tween.f0 + (tween.f1 - tween.f0) * e; camera.updateProjectionMatrix();
+    if (k >= 1) tween = null; changed = true;
+  }
+  if (controls.update()) changed = true;
+  if (Math.abs(pullT - pullTarget) > 1e-3){
+    pullT = reduceMotion ? pullTarget : pullT + (pullTarget - pullT) * .12;
+    if (Math.abs(pullT - pullTarget) < 2e-3) pullT = pullTarget;
+    changed = true;
+  }
+  if (rr && rr.pull) rr.pull.position.x = -rr.pullDist * pullT;
+  if (changed || dirty){ updateWalls(); renderer.render(scene, camera); updateLabels(); dirty = false; }
+}
+
+setScheme('base', false);
+flyTo('overview', true);
+requestAnimationFrame(tick);
+
+function wireUIOnly(){
+  const note = $('#schemeNote');
+  const set = key => {
+    note.textContent = SCHEMES[key].note;
+    const row = $('#rowSel'); row.hidden = key === 'base';
+    if (key !== 'base'){ $('#selName').textContent = SCHEMES[key].name; fillStrip($('#stripSel'), key); }
+    const r = document.getElementById('s-' + key); if (r) r.checked = true;
+  };
+  document.querySelectorAll('input[name="scheme"]').forEach(r => r.addEventListener('change', () => r.checked && set(r.value)));
+  document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => set(b.dataset.go)));
+  set('base');
+}
+})();
+</script>
