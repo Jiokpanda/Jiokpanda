@@ -147,7 +147,7 @@ footer{margin-top:40px; font-size:12px; color:var(--muted)}
   <header class="top">
     <div class="eyebrow">오른쪽 벽 3,130 · 아래 조리대 1,850 · 단위 mm</div>
     <h1>ㄱ자 주방 3D 플랜</h1>
-    <p class="lede">도면 치수대로 주방을 세워 봤어요. 드래그해서 돌려 보고, 배치안을 바꿔 가며 양념망장 자리를 비교해 보세요. 결론부터 말하면 <strong>개수대장을 1150에서 900으로 줄이면 쿡탑 바로 옆에 200 망장이 들어가요.</strong></p>
+    <p class="lede">도면 치수대로 주방을 세워 봤어요. 드래그해서 돌려 보고, 배치안을 바꿔 가며 양념망장 자리를 비교해 보세요. 결론부터 말하면 <strong>식세기와 개수대는 그대로 두고 인덕션장을 730에서 580으로 줄이면, 벽 쪽에 150 망장이 들어가요.</strong></p>
   </header>
 
   <section class="work" aria-label="3D 주방 모델과 배치안">
@@ -169,7 +169,7 @@ footer{margin-top:40px; font-size:12px; color:var(--muted)}
         <legend>배치안</legend>
         <div class="scheme-grid">
           <label><input type="radio" name="scheme" id="s-base" value="base" checked><span><b>원안</b><small>도면 그대로</small></span></label>
-          <label><input type="radio" name="scheme" id="s-A" value="A"><span><b>A안 <em class="tag" style="font-style:normal">추천</em></b><small>쿡탑 옆 200 망장</small></span></label>
+          <label><input type="radio" name="scheme" id="s-A" value="A"><span><b>A안 <em class="tag" style="font-style:normal">추천</em></b><small>벽 쪽 150 망장</small></span></label>
           <label><input type="radio" name="scheme" id="s-B" value="B"><span><b>B안</b><small>쿡탑 아래 양념 서랍</small></span></label>
           <label><input type="radio" name="scheme" id="s-C" value="C"><span><b>C안</b><small>슬림 식세기 + 150 망장</small></span></label>
         </div>
@@ -202,21 +202,21 @@ footer{margin-top:40px; font-size:12px; color:var(--muted)}
 
   <section class="analysis" aria-labelledby="h-rack">
     <div class="verdict">
-      <h2 id="h-rack">양념망장, 넣을 수 있어요</h2>
-      <p>오른쪽 벽 하부장은 벽부터 코너까지 쿡탑 730, 식세기 600, 개수대 1150으로 꽉 차 있어서 그대로는 자리가 없어요. 그런데 개수대 구간 1150이 도면 속 싱크볼(약 840)보다 넉넉해요. 개수대장을 900으로 줄이면 200이 남고, 이걸 쿡탑 바로 옆으로 옮기면 요리하다가 손만 뻗어 꺼내 쓰는 자리가 돼요.</p>
-      <div class="math"><div>개수대 구간 1150 = 개수대장 900 + 코너 필러 50 + <em>망장 200</em></div><div>→ 쿡탑 730 | <em>망장 200</em> | 식세기 600 | 개수대 900 | 필러 50</div></div>
+      <h2 id="h-rack">양념망장, 150이면 들어가요</h2>
+      <p>식세기와 개수대는 아래 분배기 때문에 옮길 수 없으니, 손댈 수 있는 곳은 인덕션 구간 730뿐이에요. 인덕션장을 580으로 줄이고 150 망장을 넣을 수 있어요. 다만 망장은 벽 쪽에 둬야 해요. 인덕션을 벽에 붙이면 유리 폭(약 590)이 580장보다 넓어서 벽 타일에 닿거든요.</p>
+      <div class="math"><div>인덕션 구간 730 = <em>망장 150</em> + 인덕션장 580</div><div>→ 벽 | <em>망장 150</em> | 인덕션 580 | 식세기 600 | 개수대 1150 | 코너 650</div><div>인덕션 타공 폭 560 &gt; 580장 안쪽 폭 544 (측판 18T) → 측판 윗부분 따내기</div></div>
     </div>
 
     <div class="table-wrap">
       <table>
         <thead><tr><th>안</th><th>망장 자리</th><th>바꿔야 하는 것</th><th>쿡탑에서</th><th>판단</th></tr></thead>
         <tbody>
-          <tr><td class="k">A</td><td>쿡탑 바로 옆, 폭 200<span class="sub">식세기와 쿡탑 사이</span></td><td>개수대장 1150 → 900 (싱크볼 860 이하)<span class="sub">식세기가 코너 쪽으로 200 이동, 개수대 중심 약 75 이동</span></td><td>바로 옆</td><td><span class="pill ok">추천</span><button class="row-go" type="button" data-go="A">3D로 보기</button></td></tr>
-          <tr><td class="k">B</td><td>쿡탑 아래 둘째 서랍, 폭 730<span class="sub">인덕션 바로 아래 첫 서랍은 얕아요</span></td><td>없음<span class="sub">서랍 안에 칸막이·병 정리대만 추가</span></td><td>바로 아래</td><td><span class="pill mid">공사 변경 없이</span><button class="row-go" type="button" data-go="B">3D로 보기</button></td></tr>
-          <tr><td class="k">C</td><td>쿡탑 바로 옆, 폭 150</td><td>식세기 60cm → 45cm 슬림형<span class="sub">개수대 1150은 그대로</span></td><td>바로 옆</td><td><span class="pill warn">식세기 용량 줄어듦</span><button class="row-go" type="button" data-go="C">3D로 보기</button></td></tr>
-          <tr><td class="k">D</td><td>식세기와 개수대 사이, 폭 200</td><td>개수대장 1150 → 900</td><td>약 600 떨어짐</td><td><span class="pill warn">A안보다 불리</span></td></tr>
-          <tr><td class="k">E</td><td>홈바나 가전장에 키큰 망장</td><td>키큰장 내부 구성</td><td>맞은편 약 2.1m</td><td><span class="pill mid">큰 병·여분 보관용</span></td></tr>
-          <tr><td class="k">F</td><td>쿡탑 구간 730을 쪼개기</td><td>인덕션 아래에 보통 600 이상 하부장이 필요해서, 벽 쪽 필러를 빼면 남는 폭이 100 남짓</td><td>—</td><td><span class="pill no">어려움</span></td></tr>
+          <tr><td class="k">A</td><td>벽과 인덕션 사이, 폭 150</td><td>인덕션장 730 → 580, 인덕션·후드가 식세기 쪽으로 약 75 이동<span class="sub">인덕션장 측판 윗부분 따내기</span></td><td>바로 옆</td><td><span class="pill ok">추천</span><button class="row-go" type="button" data-go="A">3D로 보기</button></td></tr>
+          <tr><td class="k">B</td><td>인덕션 아래 둘째 서랍, 폭 730<span class="sub">인덕션 바로 아래 첫 서랍은 얕아요</span></td><td>없음<span class="sub">서랍 안에 칸막이·병 정리대만 추가</span></td><td>바로 아래</td><td><span class="pill mid">공사 변경 없이</span><button class="row-go" type="button" data-go="B">3D로 보기</button></td></tr>
+          <tr><td class="k">C</td><td>인덕션과 식세기 사이, 폭 150</td><td>식세기 60cm → 45cm 슬림형<span class="sub">식세기의 개수대 쪽 끝은 그대로</span></td><td>바로 옆</td><td><span class="pill warn">식세기 용량 줄어듦</span><button class="row-go" type="button" data-go="C">3D로 보기</button></td></tr>
+          <tr><td class="k">D</td><td>홈바나 가전장에 키큰 망장</td><td>키큰장 내부 구성</td><td>맞은편 약 2.1m</td><td><span class="pill mid">큰 병·여분 보관용</span></td></tr>
+          <tr><td class="k">—</td><td>인덕션과 식세기 사이, 폭 150<span class="sub">인덕션장을 벽에 붙이는 배치</span></td><td>인덕션 유리(약 590)가 580장보다 넓어 벽에 닿아요</td><td>—</td><td><span class="pill no">어려움</span></td></tr>
+          <tr><td class="k">—</td><td>개수대장을 줄이고 폭 200<span class="sub">처음에 추천했던 안</span></td><td>식세기와 개수대가 움직여요</td><td>—</td><td><span class="pill no">분배기 때문에 불가</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -225,12 +225,12 @@ footer{margin-top:40px; font-size:12px; color:var(--muted)}
       <div>
         <h3>시공사와 확인할 것</h3>
         <ul>
-          <li><b>싱크볼 규격.</b> 도면의 볼은 약 <span class="num">840 × 500</span>으로 읽혀요. 860 이하 볼은 보통 900 하부장에 들어가지만, 고른 제품의 최소 하부장 폭을 확인하세요.</li>
-          <li><b>코너 필러.</b> A안은 개수대 쪽 필러 50을 따로 잡은 보수적인 치수예요. 코너장 쪽 필러만으로 문끼리 부딪히지 않는다면 개수대장을 950까지 키울 수 있어요.</li>
-          <li><b>수전·배수 위치.</b> A안에서는 개수대 중심이 코너 쪽으로 약 75 옮겨가요. 배수구와 급수 배관이 따라올 수 있는지 물어보세요.</li>
-          <li><b>파란 점선 박스.</b> 개수대 뒤쪽, 식세기 쪽에 파란 점선 X 박스가 있어요. 하부장 안에 들어가는 설비(정수기, 음식물처리기 등)라면 A안에서 식세기와 약 140 겹쳐요. 그 경우 설비를 개수대장 코너 쪽으로 옮기거나 D안처럼 순서를 바꿔야 해요.</li>
-          <li><b>망장 하드웨어.</b> 200 하부장이면 바스켓 안쪽 폭이 대략 130~140이에요(제품마다 달라요). 1.7L 간장병 같은 키 큰 병이 들어가게 단 높이를 조절할 수 있는지 확인하세요.</li>
-          <li><b>손잡이.</b> 망장, 식세기, 서랍 손잡이를 같은 방식(J형이나 푸시)으로 맞추면 앞면이 깔끔해요.</li>
+          <li><b>인덕션 설치설명서.</b> 고를 제품의 타공 치수(대개 <span class="num">560 × 480~490</span>)와 하부장 조건을 확인하세요. LG는 상판 위에서 본체 아래까지 깊이 75mm를 확보하라고 안내해요.</li>
+          <li><b>측판 따내기.</b> 타공 560이 580장 안쪽 폭 544보다 16 넓어서, 양쪽 측판 윗부분을 약 8mm 폭, 75mm 높이로 따내야 해요. 타공은 장 바깥 끝에서 10mm 안쪽이라 망장이나 식세기 자리로 넘어가지는 않아요. 이 작업을 해 주는지 시공사에 물어보세요.</li>
+          <li><b>벽 쪽 필러.</b> 150을 망장에 다 쓰려면 벽 쪽에 필러를 두지 않아야 해요. 벽이 휘었다면 망장 측판을 벽에 맞춰 깎는 식으로 맞춰요.</li>
+          <li><b>후드 위치.</b> 인덕션 중심이 식세기 쪽으로 약 75 옮겨가니 후드도 따라가야 해요. 상부장 730 구간 안에서 후드를 식세기 쪽으로 붙이면 벽 쪽에 약 130 폭 상부장이 남아요.</li>
+          <li><b>150 망장 크기.</b> 바스켓 안쪽 폭이 대략 90~100이라 지름 9cm 안팎 병까지예요(제품마다 달라요). 1.7L급 큰 병은 B안처럼 서랍에 두거나 키큰장에 두세요.</li>
+          <li><b>인덕션 아래 서랍.</b> 580장 서랍은 안쪽 폭이 약 540으로 줄어요. 첫 서랍은 본체 때문에 얕고, 삼성은 인덕션 아래에 다른 걸 둘 때 10mm 이상 띄우라고 안내해요.</li>
         </ul>
       </div>
       <div>
@@ -241,6 +241,7 @@ footer{margin-top:40px; font-size:12px; color:var(--muted)}
           <li>통로는 키큰장 앞에서 오른쪽 조리대까지 약 <span class="num">2,120</span>, 아래 조리대 끝까지 약 <span class="num">970</span>이에요.</li>
           <li>높이는 도면에 없어서 흔히 쓰는 값을 넣었어요. 상판 <span class="num">850</span>, 상부장 아래 <span class="num">1,480</span>, 천장 <span class="num">2,300</span>.</li>
           <li>도면 아래쪽은 벽이 끝나 있어서 거실·식당 쪽으로 열린 조리대로 그렸어요. 상부장은 오른쪽 벽 점선(벽에서 약 <span class="num">370</span>) 자리에만 넣었어요.</li>
+          <li>개수대 뒤 파란 점선 X 박스를 난방 분배기 자리로 봤어요. 식세기와 개수대는 원안 자리에 고정했어요.</li>
         </ul>
       </div>
     </div>
@@ -263,13 +264,13 @@ const SINK = {x0:2930, x1:3410, len:840, depth:220};
 
 const SCHEMES = {
   base:{name:'원안', segs:[['cook',730],['dw',600],['sink',1150]], pull:null,
-    note:'도면 그대로예요. 쿡탑 730, 식세기 600, 개수대 1150이 벽부터 코너까지 꽉 차 있어서 망장 자리가 따로 없어요.'},
-  A:{name:'A안', segs:[['cook',730],['rack',200],['dw',600],['sink',900],['filler',50]], pull:'rack',
-    note:'개수대장을 1150에서 900으로 줄이고, 남는 200을 쿡탑 바로 옆 망장으로 써요. 식세기는 코너 쪽으로 200 밀리고 개수대 중심은 약 75 옮겨가요. 코너 쪽 필러 50은 보수적으로 잡은 값이에요.'},
+    note:'도면 그대로예요. 인덕션 730, 식세기 600, 개수대 1150이 벽부터 코너까지 꽉 차 있어요. 식세기와 개수대는 아래 분배기 때문에 고정이에요.'},
+  A:{name:'A안', segs:[['rack',150],['cook',580],['dw',600],['sink',1150]], pull:'rack',
+    note:'인덕션장을 730에서 580으로 줄이고 벽 쪽에 150 망장을 넣어요. 식세기와 개수대는 그대로예요. 인덕션과 후드는 식세기 쪽으로 약 75 옮겨가고, 인덕션장 측판 윗부분을 조금 따내야 해요.'},
   B:{name:'B안', segs:[['cook',730],['dw',600],['sink',1150]], pull:'drawer',
     note:'배치는 원안 그대로 두고, 쿡탑 아래 730 폭 서랍 중 둘째 서랍을 양념 서랍으로 써요. 바닥이 넓어 작은 병을 많이 세울 수 있지만, 키 큰 병은 서랍 높이를 확인해야 해요.'},
   C:{name:'C안', segs:[['cook',730],['rack',150],['dw',450],['sink',1150]], pull:'rack',
-    note:'식세기를 45cm 슬림형으로 바꾸고 150 망장을 넣어요. 개수대 1150은 그대로지만 식세기 용량이 줄고, 150 망장에는 지름 9cm 안팎 병까지만 들어가요.'}
+    note:'인덕션 730은 그대로 두고 식세기를 45cm 슬림형으로 바꿔 150 망장을 넣어요. 식세기의 개수대 쪽 끝은 그대로지만 용량이 줄어요.'}
 };
 const SEG_NAME = {cook:'쿡탑', rack:'망장', dw:'식세기', sink:'개수대', filler:'', corner:'코너'};
 
@@ -483,16 +484,28 @@ const uppers = new THREE.Group(); scene.add(uppers);
   box(F + DT, C.W, C.UB + 18, C.H, 0, C.ZE - 18, mat.carcassLight, g);
   box(F + DT, C.W, C.UB, C.UB + 18, 0, C.ZE - 18, mat.door, g);
   box(F, C.W, C.UB, C.H, C.ZE - 18, C.ZE, mat.door, g);
-  box(F - 4, F + DT, C.UB, C.UB + 46, 30, 700, mat.black, g); // hood visor
   const uf = (z0, z1, y0) => {
     box(F, F + DT, y0 + 1.5, C.H - 1.5, z0 + 1.5, z1 - 1.5, mat.door, g);
     box(F - 0.6, F + 2, y0 + 8, y0 + 16, z0 + 1.5, z1 - 1.5, mat.groove, g);
   };
-  uf(0, 730, C.UB + 48);
   [[730,1030],[1030,1330],[1330,1905],[1905,2480],[2480,C.ZE-18]].forEach(([a,b]) => uf(a, b, C.UB));
 })();
 
-/* bottom run (peninsula), corner, right-run plinth, cooktop, robot */
+let hoodG = null;
+function buildHood(z0, z1){
+  if (hoodG){ uppers.remove(hoodG); disposeTree(hoodG); }
+  const g = hoodG = new THREE.Group(); uppers.add(g);
+  const F = C.UF, DT = C.DT;
+  const uf = (a, b, y0) => {
+    box(F, F + DT, y0 + 1.5, C.H - 1.5, a + 1.5, b - 1.5, mat.door, g);
+    box(F - 0.6, F + 2, y0 + 8, y0 + 16, a + 1.5, b - 1.5, mat.groove, g);
+  };
+  if (z0 > 0) uf(0, z0, C.UB);
+  box(F - 4, F + DT, C.UB, C.UB + 46, z0 + 30, z1 - 30, mat.black, g);
+  uf(z0, z1, C.UB + 48);
+}
+
+/* bottom run (peninsula), corner, right-run plinth, robot */
 (function buildBottom(){
   const g = new THREE.Group(); scene.add(g);
   const DT = C.DT, back = C.ZE - 18;
@@ -516,8 +529,6 @@ const uppers = new THREE.Group(); scene.add(uppers);
   // corner block and right-run plinth
   box(2890, C.W - 20, C.TOE, CAB_TOP, C.ZB, back, mat.carcass, g);
   box(FACE_R + 50, C.W - 20, 0, C.TOE, 0, back, mat.toe, g);
-  // induction cooktop (plan: x 2950–3470, z 80–660)
-  box(2950, 3470, C.CT, C.CT + 6, 80, 660, glassMats, g);
   // blue dashed box from the drawing (behind the sink, purpose unknown)
   const y = mm(C.CT + 2), x0 = mm(3258), x1 = mm(C.W - 6), z0 = mm(1392), z1 = mm(1987);
   const pts = [[x0,z0],[x1,z0],[x1,z0],[x1,z1],[x1,z1],[x0,z1],[x0,z1],[x0,z0],[x0,z0],[x1,z1],[x1,z0],[x0,z1]].map(([a,b]) => new THREE.Vector3(a, y, b));
@@ -579,6 +590,11 @@ function buildRightRun(key){
   // countertop with the sink opening
   const zc = (info.sink[0] + info.sink[1]) / 2, bz0 = zc - SINK.len / 2, bz1 = zc + SINK.len / 2;
   info.sinkCenter = zc;
+  // induction cooktop centred on its cabinet (plan: x 2950–3470, ~580 along the run); hood follows it
+  const cc = (info.cook[0] + info.cook[1]) / 2; info.cookCenter = cc;
+  box(2950, 3470, C.CT, C.CT + 6, cc - 290, cc + 290, glassMats, g);
+  const hz0 = info.cook[0] > 0 ? 130 : 0; info.hoodCenter = (hz0 + 730) / 2;
+  buildHood(hz0, 730);
   box(C.RF, C.W, CAB_TOP, C.CT, 0, bz0, mat.counter, g);
   box(C.RF, C.W, CAB_TOP, C.CT, bz1, C.ZE + 20, mat.counter, g);
   box(C.RF, SINK.x0, CAB_TOP, C.CT, bz0, bz1, mat.counter, g);
@@ -668,16 +684,16 @@ function makeLabels(key){
   const L = [];
   const add = (text, pos, kind, extra) => L.push(Object.assign({text, pos, kind: kind || 'item', group:'labels'}, extra || {}));
   const dim = (text, pos) => L.push({text, pos, kind:'dim', group:'dims'});
+  const info = rr.info;
   add('가전장 · 전자레인지+밥솥', [C.TF + 15, 1560, 300]);
   add('김치냉장고', [C.TF + 15, 1250, 968]);
   add('냉장고', [C.TF + 15, 1250, 1792]);
   add('홈바', [C.TF + 25, 1260, 2690]);
-  add('인덕션', [3210, C.CT + 20, 370]);
-  add('후드', [C.UF - 15, C.UB + 22, 365], 'item', {needsUppers:true});
+  add('인덕션', [3210, C.CT + 20, info.cookCenter]);
+  add('후드', [C.UF - 15, C.UB + 22, info.hoodCenter], 'item', {needsUppers:true});
   add('직배수 로봇청소기', [1980, 600, FACE_B - 5], 'memo');
   add('코너장', [2530, 600, FACE_B - 5]);
-  add('파란 점선 박스', [3414, C.CT + 10, 1690], 'memo');
-  const info = rr.info;
+  add('분배기 자리 (파란 점선)', [3414, C.CT + 10, 1690], 'memo');
   if (info.dw) add(key === 'C' ? '슬림 식세기 45cm' : '식세기', [FACE_R - 5, 520, (info.dw[0] + info.dw[1]) / 2]);
   add('개수대', [FACE_R - 5, 520, info.sinkCenter]);
   if (info.rack) add('양념망장 ' + (info.rack[1] - info.rack[0]), [C.RF - 15, CAB_TOP - 20, (info.rack[0] + info.rack[1]) / 2], 'rack', {follow:true});
@@ -700,7 +716,7 @@ function makeLabels(key){
 /* ---------- views ---------- */
 const VIEWS = {
   overview: () => camera.aspect >= 1.15 ? {pos:[1.85, 4.7, 6.1], tgt:[1.85, 0.55, 1.45], fov:42} : {pos:[1.85, 6.2, 7.4], tgt:[1.85, 0.5, 1.4], fov:42},
-  counter: () => camera.aspect >= 1.15 ? {pos:[1.2, 2.05, 2.15], tgt:[3.05, 0.68, 1.0], fov:42} : {pos:[1.0, 2.5, 3.2], tgt:[3.0, 0.7, 0.95], fov:42},
+  counter: () => camera.aspect >= 1.15 ? {pos:[1.2, 2.05, 2.05], tgt:[3.05, 0.68, 0.88], fov:42} : {pos:[1.0, 2.5, 3.2], tgt:[3.0, 0.7, 0.95], fov:42},
   tall: () => camera.aspect >= 1.15 ? {pos:[2.75, 1.6, 1.65], tgt:[0.45, 1.05, 1.58], fov:42} : {pos:[2.9, 1.9, 3.6], tgt:[0.4, 1.0, 1.4], fov:42},
   plan: () => {
     const fov = 14, t = Math.tan(THREE.MathUtils.degToRad(fov / 2));
