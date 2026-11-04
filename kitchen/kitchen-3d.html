@@ -10,7 +10,7 @@
   --line:#D6DCD7; --ink-line:#8E9893; --seg:#F7F8F6; --seg-strong:#27302D; --on-strong:#F4F6F4;
   --gochujang:#B23E2A; --on-accent:#FFFFFF; --memo:#2C66D2; --plan-red:#D6342A;
   --ok:#22704A; --ok-soft:#DDEFE4; --warn:#8F5A0B; --warn-soft:#F5EAD6; --no:#A23224; --no-soft:#F6DFDA;
-  --chip-bg:rgba(255,255,255,.93);
+  --chip-bg:rgba(255,255,255,.93); --accent-soft:#F6E3DE;
   --f-display:"Gowun Batang","Noto Serif KR","AppleMyungjo",serif;
   --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
@@ -21,7 +21,7 @@
     --line:#2E3532; --ink-line:#5D6762; --seg:#232927; --seg-strong:#DCE3DF; --on-strong:#151A18;
     --gochujang:#E2674F; --on-accent:#1A0F0C; --memo:#73A0F4; --plan-red:#F0675C;
     --ok:#7DCE9F; --ok-soft:#1C3227; --warn:#E3B061; --warn-soft:#3A2D15; --no:#F08A78; --no-soft:#3B1E19;
-    --chip-bg:rgba(27,32,30,.92);
+    --chip-bg:rgba(27,32,30,.92); --accent-soft:#3B211B;
     color-scheme:dark;
   }
 }
@@ -30,7 +30,7 @@
   --line:#2E3532; --ink-line:#5D6762; --seg:#232927; --seg-strong:#DCE3DF; --on-strong:#151A18;
   --gochujang:#E2674F; --on-accent:#1A0F0C; --memo:#73A0F4; --plan-red:#F0675C;
   --ok:#7DCE9F; --ok-soft:#1C3227; --warn:#E3B061; --warn-soft:#3A2D15; --no:#F08A78; --no-soft:#3B1E19;
-  --chip-bg:rgba(27,32,30,.92);
+  --chip-bg:rgba(27,32,30,.92); --accent-soft:#3B211B;
   color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -58,9 +58,11 @@ h1{font-family:var(--f-display); font-weight:700; font-size:clamp(28px, 4.2vw, 4
 .btn:hover{border-color:var(--ink-line)}
 .btn[aria-pressed="true"]{background:var(--seg-strong); color:var(--on-strong); border-color:var(--seg-strong)}
 .btn:focus-visible, .schemes input:focus-visible + span, .toggles input:focus-visible, .row-go:focus-visible{outline:2px solid var(--memo); outline-offset:2px}
-.pull{position:absolute; right:10px; bottom:10px; z-index:2; font:inherit; font-size:14px; font-weight:600; color:var(--on-accent); background:var(--gochujang); border:0; border-radius:5px; padding:10px 14px; cursor:pointer; box-shadow:0 1px 0 rgba(0,0,0,.08)}
+.actions{position:absolute; right:10px; bottom:10px; z-index:2; display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; max-width:calc(100% - 20px)}
+.pull{font:inherit; font-size:14px; font-weight:600; color:var(--on-accent); background:var(--gochujang); border:0; border-radius:5px; padding:10px 14px; cursor:pointer; box-shadow:0 1px 0 rgba(0,0,0,.08)}
 .pull:hover{filter:brightness(1.06)}
 .pull:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
+.pull.alt{color:var(--ink); background:var(--chip-bg); border:1px solid var(--line); font-weight:500}
 .hint{position:absolute; left:12px; bottom:12px; z-index:2; font-size:12px; color:var(--muted); max-width:52%; line-height:1.4; pointer-events:none}
 .hint .touch{display:none}
 @media (hover:none){ .hint .mouse{display:none} .hint .touch{display:inline} }
@@ -134,6 +136,38 @@ h3{font-size:16px; font-weight:600; margin:0 0 10px}
 .cols li b{color:var(--ink); font-weight:600}
 .num{font-family:var(--f-mono); font-size:.93em; font-variant-numeric:tabular-nums}
 footer{margin-top:40px; font-size:12px; color:var(--muted)}
+/* induction cabinet section */
+.drawer-sec{display:grid; gap:16px}
+.drawer-head{display:grid; gap:10px; max-width:70ch}
+.drawer-head p{margin:0; color:var(--ink-2)}
+.seg-toggle{display:flex; gap:6px; align-items:center; font-size:13px; color:var(--muted)}
+.seg-toggle .btn{font-family:var(--f-mono)}
+.drawer-body{display:grid; grid-template-columns:minmax(0, 540px) minmax(0, 1fr); gap:24px; align-items:start}
+@media (max-width: 880px){ .drawer-body{grid-template-columns:minmax(0, 1fr)} }
+.section-fig{background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:12px; overflow-x:auto}
+.section-fig svg{display:block; width:100%; min-width:440px; height:auto}
+.drawer-side{display:grid; gap:14px; min-width:0}
+table.dtable{min-width:440px}
+.dnotes{margin:0; padding-left:1.1em; display:grid; gap:8px; color:var(--ink-2); font-size:14px; max-width:64ch}
+.s-floor{stroke:var(--ink-line); stroke-width:3}
+.s-wall{stroke:var(--ink-line); stroke-width:2}
+.s-wallbg{fill:var(--paper)} .s-hatch{stroke:var(--line); stroke-width:3}
+.s-toe{fill:var(--line)}
+.s-carcass{fill:var(--surface); stroke:var(--ink-line); stroke-width:2}
+.s-top{fill:var(--ink-2)}
+.s-glass{fill:var(--ink)}
+.s-body{fill:var(--seg-strong)} .s-bodyt{fill:var(--on-strong); font-family:var(--f-body); font-size:27px}
+.s-cool{fill:var(--gochujang); opacity:.3}
+.s-front{fill:var(--seg); stroke:var(--ink-line); stroke-width:2}
+.s-box{fill:none; stroke:var(--ink-2); stroke-width:2.5}
+.s-box1{fill:var(--accent-soft); stroke:var(--gochujang)}
+.s-fl{stroke:var(--ink-line); stroke-width:1.5; stroke-dasharray:6 5}
+.s-dim{stroke:var(--muted); stroke-width:1.5; fill:none}
+.s-t{fill:var(--ink); font-family:var(--f-body); font-size:28px}
+.s-tm{fill:var(--muted); font-family:var(--f-body); font-size:25px}
+.s-n{fill:var(--ink); font-family:var(--f-mono); font-size:27px}
+.s-acc{fill:var(--gochujang); font-weight:600}
+@media (max-width: 640px){ .hint{display:none} }
 @media (max-width: 520px){
   .stage{height:clamp(360px, 62vh, 520px)}
   .btn{padding:7px 9px; font-size:12px}
@@ -161,7 +195,7 @@ footer{margin-top:40px; font-size:12px; color:var(--muted)}
         <button class="btn" type="button" data-view="plan" aria-pressed="false">평면</button>
       </div>
       <div class="hint"><span class="mouse">드래그 회전 · 휠 확대 · 우클릭 드래그 이동</span><span class="touch">한 손가락 회전 · 두 손가락 확대/이동</span></div>
-      <button class="pull" type="button" id="pullBtn" hidden>망장 꺼내보기</button>
+      <div class="actions"><button class="pull alt" type="button" id="cabBtn" aria-pressed="false">인덕션 서랍 열기</button><button class="pull" type="button" id="pullBtn" hidden>망장 꺼내보기</button></div>
     </div>
 
     <aside class="panel">
@@ -221,16 +255,35 @@ footer{margin-top:40px; font-size:12px; color:var(--muted)}
       </table>
     </div>
 
+    <div class="drawer-sec" aria-labelledby="h-drawer">
+      <div class="drawer-head">
+        <h2 id="h-drawer">인덕션장 서랍 3단</h2>
+        <p>상판 포함 870, 상판 12T 인조세라믹 기준이에요. 1단은 조리도구 서랍, 2단과 3단은 같은 높이로 나눴어요. 3D에서 <b>인덕션 서랍 열기</b>를 누르면 세 칸이 모두 열려요.</p>
+        <div class="seg-toggle" role="group" aria-label="1단 앞판 높이">
+          <span>1단 앞판</span>
+          <button class="btn" type="button" data-d1="140" aria-pressed="false">140</button>
+          <button class="btn" type="button" data-d1="150" aria-pressed="true">150</button>
+        </div>
+      </div>
+      <div class="drawer-body">
+        <div class="section-fig"><svg id="sectionSvg" viewBox="-330 -12 1190 944" role="img" aria-label="인덕션장 옆 단면도: 상판, 인덕션 본체, 서랍 세 칸의 높이"></svg></div>
+        <div class="drawer-side">
+          <div class="table-wrap"><table class="dtable"><thead><tr><th>단</th><th>앞판 구간</th><th>서랍 안쪽 높이</th><th>쓰임</th></tr></thead><tbody id="drawerRows"></tbody></table></div>
+          <ul class="dnotes" id="drawerNotes"></ul>
+        </div>
+      </div>
+    </div>
+
     <div class="cols">
       <div>
         <h3>시공사와 확인할 것</h3>
         <ul>
           <li><b>인덕션 설치설명서.</b> 고를 제품의 타공 치수(대개 <span class="num">560 × 480~490</span>)와 하부장 조건을 확인하세요. LG는 상판 위에서 본체 아래까지 깊이 75mm를 확보하라고 안내해요.</li>
-          <li><b>측판 따내기.</b> 타공 560이 580장 안쪽 폭 544보다 16 넓어서, 양쪽 측판 윗부분을 약 8mm 폭, 75mm 높이로 따내야 해요. 타공은 장 바깥 끝에서 10mm 안쪽이라 망장이나 식세기 자리로 넘어가지는 않아요. 이 작업을 해 주는지 시공사에 물어보세요.</li>
+          <li><b>측판 따내기.</b> 타공 560이 580장 안쪽 폭 544보다 16 넓어서, 양쪽 측판 윗부분을 약 8mm 폭, 65mm 높이(하부장 윗면 858에서 795까지)로 따내야 해요. 타공은 장 바깥 끝에서 10mm 안쪽이라 망장이나 식세기 자리로 넘어가지는 않아요. 이 작업을 해 주는지 시공사에 물어보세요.</li>
           <li><b>벽 쪽 필러.</b> 150을 망장에 다 쓰려면 벽 쪽에 필러를 두지 않아야 해요. 벽이 휘었다면 망장 측판을 벽에 맞춰 깎는 식으로 맞춰요.</li>
           <li><b>후드 위치.</b> 인덕션 중심이 식세기 쪽으로 약 75 옮겨가니 후드도 따라가야 해요. 상부장 730 구간 안에서 후드를 식세기 쪽으로 붙이면 벽 쪽에 약 130 폭 상부장이 남아요.</li>
           <li><b>150 망장 크기.</b> 바스켓 안쪽 폭이 대략 90~100이라 지름 9cm 안팎 병까지예요(제품마다 달라요). 1.7L급 큰 병은 B안처럼 서랍에 두거나 키큰장에 두세요.</li>
-          <li><b>인덕션 아래 서랍.</b> 580장 서랍은 안쪽 폭이 약 540으로 줄어요. 첫 서랍은 본체 때문에 얕고, 삼성은 인덕션 아래에 다른 걸 둘 때 10mm 이상 띄우라고 안내해요.</li>
+          <li><b>인덕션 아래 서랍.</b> 580장 서랍은 측판, 레일, 서랍 옆판을 빼면 안쪽 폭이 약 490이에요. 높이 구성은 위의 서랍 3단 단면을 보세요.</li>
         </ul>
       </div>
       <div>
@@ -239,9 +292,9 @@ footer{margin-top:40px; font-size:12px; color:var(--muted)}
           <li>축척은 도면의 <span class="num">1,850 · 2,480 · 700</span> 치수에 맞췄고, 나머지는 그 비율로 읽었어요. 오차는 ±20 안팎이에요.</li>
           <li>키큰장 폭은 가전장 약 <span class="num">600</span>, 김치냉장고 약 <span class="num">735</span>, 냉장고 약 <span class="num">915</span>, 홈바 약 <span class="num">880</span>, 깊이는 벽 마감 포함 약 <span class="num">750</span>으로 잡았어요.</li>
           <li>통로는 키큰장 앞에서 오른쪽 조리대까지 약 <span class="num">2,120</span>, 아래 조리대 끝까지 약 <span class="num">970</span>이에요.</li>
-          <li>높이는 도면에 없어서 흔히 쓰는 값을 넣었어요. 상판 <span class="num">850</span>, 상부장 아래 <span class="num">1,480</span>, 천장 <span class="num">2,300</span>.</li>
+          <li>상판 윗면은 <span class="num">870</span>(12T 인조세라믹)이에요. 걸레받이 <span class="num">100</span>, 상부장 아래 <span class="num">1,480</span>, 천장 <span class="num">2,300</span>은 흔히 쓰는 값으로 넣었어요.</li>
           <li>도면 아래쪽은 벽이 끝나 있어서 거실·식당 쪽으로 열린 조리대로 그렸어요. 상부장은 오른쪽 벽 점선(벽에서 약 <span class="num">370</span>) 자리에만 넣었어요.</li>
-          <li>개수대 뒤 파란 점선 X 박스를 난방 분배기 자리로 봤어요. 식세기와 개수대는 원안 자리에 고정했어요.</li>
+          <li>개수대 뒤 파란 점선 X 박스가 난방 분배기 자리예요. 그래서 식세기와 개수대는 원안 자리에 고정했어요.</li>
         </ul>
       </div>
     </div>
@@ -258,9 +311,11 @@ const $ = s => document.querySelector(s);
 const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------- plan data (mm). x: plan right, z: plan down, y: height ---------- */
-const C = {W:3570, RF:2870, ZB:2480, XB:1720, ZE:3130, TF:750, H:2300, CT:850, CTT:20, TOE:100, DT:18, UB:1480, UF:3200};
+const C = {W:3570, RF:2870, ZB:2480, XB:1720, ZE:3130, TF:750, H:2300, CT:870, CTT:12, TOE:100, DT:18, UB:1480, UF:3200};
 const FACE_R = C.RF + 20, FACE_B = C.ZB + 20, CAB_TOP = C.CT - C.CTT;
 const SINK = {x0:2930, x1:3410, len:840, depth:220};
+// induction cabinet drawers: d1 = top drawer front height; induction body reaches 75 below the worktop surface (LG guide), keep 10 clear under it
+const DRAWER = {d1:150, indDepth:75, cool:10};
 
 const SCHEMES = {
   base:{name:'원안', segs:[['cook',730],['dw',600],['sink',1150]], pull:null,
@@ -295,6 +350,77 @@ function fillStrip(el, key){
   el.replaceChildren(bar, dims);
 }
 fillStrip($('#stripBase'), 'base');
+
+/* ---------- induction cabinet drawers: numbers, side section, notes ---------- */
+function drawerCalc(d1){
+  const top = C.CT, cab = C.CT - C.CTT, toe = C.TOE, rest = (cab - toe - d1) / 2;
+  const slots = [[cab - d1, cab], [toe + rest, cab - d1], [toe, toe + rest]]; // 1단, 2단, 3단
+  const indBottom = top - DRAWER.indDepth, limit = indBottom - DRAWER.cool;
+  // drawer box: 12 above the slot bottom, 15 bottom board, top 30 under the front edge (1단: capped under the induction)
+  const boxes = slots.map(([y0, y1], i) => { const bb = y0 + 12, floor = bb + 15, bt = i === 0 ? Math.min(y1 - 30, limit) : y1 - 30; return {bb, floor, bt, inner: bt - floor}; });
+  return {d1, top, cab, toe, rest, slots, indBottom, limit, boxes};
+}
+const r5 = v => Math.round(v / 5) * 5;
+function sectionSVG(c){
+  const Y = h => 900 - h;
+  const R = (x0, h0, x1, h1, cls) => '<rect class="' + cls + '" x="' + x0 + '" y="' + Y(h1) + '" width="' + (x1 - x0) + '" height="' + (h1 - h0) + '"/>';
+  const T = (x, h, txt, cls, anchor) => '<text class="' + cls + '" x="' + x + '" y="' + Y(h) + '" text-anchor="' + (anchor || 'start') + '" dominant-baseline="middle">' + txt + '</text>';
+  const Lh = (x0, x1, h, cls) => '<line class="' + cls + '" x1="' + x0 + '" y1="' + Y(h) + '" x2="' + x1 + '" y2="' + Y(h) + '"/>';
+  const Lv = (x, h0, h1, cls) => '<line class="' + cls + '" x1="' + x + '" y1="' + Y(h0) + '" x2="' + x + '" y2="' + Y(h1) + '"/>';
+  let s = '<defs><pattern id="sHatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" class="s-wallbg"/><line x1="0" y1="0" x2="0" y2="14" class="s-hatch"/></pattern></defs>';
+  s += '<rect class="s-wall" x="700" y="' + Y(918) + '" width="40" height="918" fill="url(#sHatch)"/>';
+  s += Lh(-40, 740, 0, 's-floor');
+  s += R(70, 0, 682, c.toe, 's-toe') + T(376, c.toe / 2, '걸레받이 ' + c.toe + ' (가정)', 's-tm', 'middle');
+  s += R(38, c.toe, 682, c.cab, 's-carcass');
+  s += R(0, c.cab, 700, c.top, 's-top');
+  s += R(80, c.top, 600, c.top + 6, 's-glass');
+  s += T(0, c.top + 24, '상판 12T 인조세라믹 · 윗면 ' + c.top, 's-t');
+  s += R(105, c.indBottom, 575, c.cab, 's-body') + T(340, (c.indBottom + c.cab) / 2, '인덕션 본체', 's-bodyt', 'middle');
+  s += R(105, c.limit, 575, c.indBottom, 's-cool') + T(590, c.limit + 4, '10 띄움', 's-tm');
+  c.slots.forEach(([y0, y1]) => { s += R(20, y0 + 1.5, 38, y1 - 1.5, 's-front'); });
+  const names = ['1단 조리도구', '2단', '3단'];
+  c.boxes.forEach((b, i) => {
+    s += R(45, b.bb, 545, b.bt, i === 0 ? 's-box s-box1' : 's-box') + Lh(45, 545, b.floor, 's-fl');
+    if (i === 0) s += T(58, (b.floor + b.bt) / 2, names[0] + ' · 안쪽 약 ' + r5(b.inner), 's-t s-acc');
+    else {
+      s += T(58, b.bt - 26, names[i], 's-t');
+      s += Lv(500, b.floor, b.bt, 's-dim') + Lh(490, 510, b.floor, 's-dim') + Lh(490, 510, b.bt, 's-dim');
+      s += T(486, (b.floor + b.bt) / 2, '안쪽 약 ' + r5(b.inner), 's-t', 'end');
+    }
+  });
+  // left dimension chain
+  const ticks = [0, c.toe, c.slots[2][1], c.slots[1][1], c.cab, c.top];
+  s += Lv(-40, 0, c.top, 's-dim'); ticks.forEach(t => { s += Lh(-52, -28, t, 's-dim'); });
+  const segs = [[0, c.toe], [c.slots[2][0], c.slots[2][1]], [c.slots[1][0], c.slots[1][1]], [c.slots[0][0], c.slots[0][1]]];
+  segs.forEach(([a, b], i) => { s += T(-58, (a + b) / 2, String(Math.round((b - a) * 10) / 10), i === 3 ? 's-n s-acc' : 's-n', 'end'); });
+  s += T(-58, c.top + 22, '12', 's-n', 'end');
+  s += Lv(-190, 0, c.top, 's-dim') + Lh(-202, -178, 0, 's-dim') + Lh(-202, -178, c.top, 's-dim') + T(-206, c.top / 2, String(c.top), 's-n', 'end');
+  // right: induction depth from the worktop surface
+  s += Lv(790, c.indBottom, c.top, 's-dim') + Lh(778, 802, c.indBottom, 's-dim') + Lh(778, 802, c.top, 's-dim') + T(812, (c.indBottom + c.top) / 2, '75', 's-n');
+  s += T(0, -24, '← 앞 (통로)', 's-tm') + T(700, -24, '벽', 's-tm', 'end');
+  return s;
+}
+function renderDrawerSection(){
+  const c = drawerCalc(DRAWER.d1);
+  const svg = document.getElementById('sectionSvg'); if (svg) svg.innerHTML = sectionSVG(c);
+  const uses = ['뒤집개·집게·가위처럼 납작한 조리도구', '냄비·밀폐용기 (B안이면 양념병)', '큰 냄비·프라이팬'];
+  const rows = c.slots.map(([a, b], i) => '<tr><td class="k">' + (i + 1) + '단</td><td class="num">' + (Math.round((b - a) * 10) / 10) + '</td><td>약 ' + r5(c.boxes[i].inner) + '</td><td>' + uses[i] + '</td></tr>');
+  $('#drawerRows').innerHTML = rows.join('');
+  const c140 = drawerCalc(140), c150 = drawerCalc(150), toe120 = (c.cab - 120 - c.d1) / 2;
+  $('#drawerNotes').innerHTML = [
+    '<li>1단은 앞판이 ' + c.d1 + '이어도 서랍 박스 윗면이 <span class="num">' + c.limit + '</span>에서 막혀요. 인덕션 본체가 상판 윗면에서 75까지 내려오고(LG 안내 기준, 모델마다 달라요), 그 아래로 10을 띄워야 해서요.</li>',
+    '<li>그래서 1단 안쪽 높이는 140이면 약 ' + r5(c140.boxes[0].inner) + ', 150이면 약 ' + r5(c150.boxes[0].inner) + '이에요. 국자처럼 볼록한 도구까지 넣으려면 150이 나아요.</li>',
+    '<li>A안의 580장은 측판 윗부분(<span class="num">' + c.indBottom + '~' + c.cab + '</span>)을 따내는데, 1단 서랍 레일은 그보다 아래라 겹치지 않아요.</li>',
+    '<li>걸레받이를 120으로 하면 2·3단은 각 ' + (Math.round(toe120 * 10) / 10) + '로 줄어요. 세라믹 아래에 보강판을 덧대면 그 두께만큼 서랍 구간이 줄어요.</li>',
+    '<li>서랍 박스 여유는 흔한 값(아래 12, 바닥판 15, 앞판 윗변에서 30)으로 계산했어요. 레일 종류에 따라 ±10 달라질 수 있어요.</li>'
+  ].join('');
+  document.querySelectorAll('[data-d1]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.d1 === c.d1)));
+}
+let onD1Change = null;
+document.querySelectorAll('[data-d1]').forEach(b => b.addEventListener('click', () => {
+  DRAWER.d1 = +b.dataset.d1; renderDrawerSection(); if (onD1Change) onD1Change();
+}));
+renderDrawerSection();
 
 /* ---------- 3D ---------- */
 const stage = $('#stage'), canvas = $('#gl'), labelLayer = $('#labels');
@@ -394,7 +520,8 @@ const mat = {
   seam: M(0x5f6463, .6),
   white: M(0xf4f3ef, .5),
   wire: M(0xc9ced2, .3, .45),
-  accent: M(0xb23e2a, .55)
+  accent: M(0xb23e2a, .55),
+  wood: M(0xa87b4f, .6)
 };
 const glassMats = [mat.black, mat.black, new THREE.MeshStandardMaterial({map:cookTex, roughness:.14, metalness:.2}), mat.black, mat.black, mat.black];
 
@@ -559,24 +686,21 @@ function rFront(z0, z1, y0, y1, g, grooveMat){
   box(FACE_R - 0.6, FACE_R + 2, y1 - 22, y1 - 13, z0 + 1.5, z1 - 1.5, grooveMat || mat.groove, g);
 }
 
-let rr = null; // {group, pull, pullDist, info}
+let rr = null; // {group, pull, pullDist, drawers, info}
 function disposeTree(o){ o.traverse(n => { if (n.geometry) n.geometry.dispose(); }); }
 function buildRightRun(key){
   if (rr){ scene.remove(rr.group); disposeTree(rr.group); }
   const g = new THREE.Group(); scene.add(g);
   const DT = C.DT, cx0 = FACE_R + DT, cx1 = C.W - 20;
-  const info = {}; let pull = null, pullDist = 0, z = 0;
+  const info = {}; let pull = null, pullDist = 0, drawers = null, z = 0;
   for (const [k, w] of SCHEMES[key].segs){
     const z0 = z, z1 = z + w; z = z1; info[k] = [z0, z1];
     if (k === 'filler'){ box(FACE_R, FACE_R + DT, C.TOE, CAB_TOP, z0, z1, mat.door, g); box(cx0, cx1, C.TOE, CAB_TOP, z0, z1, mat.carcass, g); continue; }
     if (k === 'sink'){ box(cx0, cx1, C.TOE, CAB_TOP - SINK.depth - 30, z0 + 1, z1 - 1, mat.carcass, g); }
-    else box(cx0, cx1, C.TOE, CAB_TOP, z0 + 1, z1 - 1, mat.carcass, g);
+    else if (k !== 'cook') box(cx0, cx1, C.TOE, CAB_TOP, z0 + 1, z1 - 1, mat.carcass, g);
     if (k === 'cook'){
-      const rows = [[C.TOE, 380], [380, 660], [660, CAB_TOP]];
-      rows.forEach(([y0, y1], i) => {
-        if (key === 'B' && i === 1){ pull = buildDrawer(z0, z1, y0, y1); g.add(pull); pullDist = .42; }
-        else rFront(z0, z1, y0, y1, g);
-      });
+      drawers = buildCookCabinet(g, z0, z1, key);
+      if (key === 'B'){ pull = drawers[1]; pullDist = .42; }
     } else if (k === 'dw'){
       rFront(z0, z1, C.TOE, CAB_TOP, g);
       box(FACE_R - 0.6, FACE_R + 2, C.TOE + 40, C.TOE + 46, z1 - 70, z1 - 40, mat.graphite, g);
@@ -613,7 +737,7 @@ function buildRightRun(key){
   spout.rotation.z = Math.PI / 2; spout.position.set(mm(3375), mm(C.CT + 390), mm(zc));
   cyl(15, 15, 70, 3260, C.CT + 320, zc, mat.steel, g);
   const lever = box(3478, 3502, C.CT + 160, C.CT + 172, zc + 15, zc + 85, mat.steel, g);
-  rr = {group:g, pull, pullDist, info};
+  rr = {group:g, pull, pullDist, drawers, info};
 }
 function buildRack(z0, z1){
   const g = new THREE.Group();
@@ -638,21 +762,64 @@ function buildRack(z0, z1){
   });
   return g;
 }
-function buildDrawer(z0, z1, y0, y1){
-  const g = new THREE.Group();
-  const DT = C.DT;
+function buildCookCabinet(g, z0, z1, key){
+  const c = drawerCalc(DRAWER.d1), xa = FACE_R + C.DT, xb = C.W - 20, inner = mat.carcassLight;
+  box(xa, xb, C.TOE, C.TOE + 18, z0 + 1, z1 - 1, inner, g);
+  box(xb - 18, xb, C.TOE + 18, CAB_TOP, z0 + 19, z1 - 19, inner, g);
+  // side panels; in a narrow cabinet the top is notched so the induction body clears them
+  const notch = (z1 - z0 - 36) < 566;
+  [[z0 + 1, z0 + 19, z0 + 1, z0 + 11], [z1 - 19, z1 - 1, z1 - 11, z1 - 1]].forEach(([a, b, na, nb]) => {
+    box(xa, xb, C.TOE, notch ? c.indBottom : CAB_TOP, a, b, inner, g);
+    if (notch) box(xa, xb, c.indBottom, CAB_TOP, na, nb, inner, g);
+  });
+  const cc = (z0 + z1) / 2;
+  box(2975, 3445, c.indBottom, CAB_TOP - 0.5, cc - 278, cc + 278, mat.graphite, g);
+  return c.slots.map(([y0, y1], i) => {
+    const kind = i === 0 ? 'utensil' : (i === 1 ? (key === 'B' ? 'seasoning' : 'pots') : 'pans');
+    const dg = buildDrawer(z0, z1, y0, y1, c.boxes[i], kind, key === 'B' && i === 1);
+    g.add(dg); return dg;
+  });
+}
+function buildDrawer(z0, z1, y0, y1, bx, kind, accent){
+  const g = new THREE.Group(), DT = C.DT;
   box(FACE_R, FACE_R + DT, y0 + 1.5, y1 - 1.5, z0 + 1.5, z1 - 1.5, mat.door, g);
-  box(FACE_R - 0.6, FACE_R + 2, y1 - 22, y1 - 13, z0 + 1.5, z1 - 1.5, mat.accent, g);
-  const xa = FACE_R + DT, xb = xa + 470, za = z0 + 30, zb = z1 - 30, yb = y0 + 14, yt = y1 - 30;
-  box(xa, xb, yb, yb + 10, za, zb, mat.white, g);
-  box(xa, xb, yb, yt, za, za + 12, mat.white, g);
-  box(xa, xb, yb, yt, zb - 12, zb, mat.white, g);
-  box(xb - 12, xb, yb, yt, za, zb, mat.white, g);
-  const r = 36, pitch = 2 * r + 14, R = rng(99); let n = 0;
-  const nz = Math.floor((zb - za - 30) / pitch), nx = Math.floor((xb - xa - 30) / pitch);
-  const zs = za + 12 + ((zb - za - 24) - nz * pitch) / 2 + pitch / 2;
-  for (let ix = 0; ix < nx; ix++) for (let iz = 0; iz < nz; iz++){
-    bottle(g, xa + 20 + r + ix * pitch, yb + 10, zs + iz * pitch, r, Math.min(yt - yb - 10, 140 + R() * 90), n++);
+  box(FACE_R - 0.6, FACE_R + 2, y1 - 22, y1 - 13, z0 + 1.5, z1 - 1.5, accent ? mat.accent : mat.groove, g);
+  const xa = FACE_R + DT, xb = xa + 480, za = z0 + 32, zb = z1 - 32, fl = bx.floor, yt = bx.bt;
+  box(xa, xb, bx.bb, fl, za, zb, mat.white, g);
+  box(xa, xb, fl, yt, za, za + 12, mat.white, g);
+  box(xa, xb, fl, yt, zb - 12, zb, mat.white, g);
+  box(xb - 12, xb, fl, yt, za, zb, mat.white, g);
+  const iz0 = za + 12, iz1 = zb - 12, ih = yt - fl;
+  if (kind === 'seasoning'){
+    const r = 36, pitch = 2 * r + 14, R = rng(99); let n = 0;
+    const nz = Math.floor((iz1 - iz0 - 10) / pitch), nx = Math.floor((xb - xa - 30) / pitch);
+    const zs = iz0 + ((iz1 - iz0) - nz * pitch) / 2 + pitch / 2;
+    for (let ix = 0; ix < nx; ix++) for (let iz = 0; iz < nz; iz++){
+      bottle(g, xa + 20 + r + ix * pitch, fl, zs + iz * pitch, r, Math.min(ih - 8, 140 + R() * 90), n++);
+    }
+  } else if (kind === 'utensil'){
+    const step = (iz1 - iz0) / 4, zc = i => iz0 + step * (i + .5);
+    // turner, ladle, tongs, wooden spatula — lying flat, front to back
+    box(xa + 30, xa + 140, fl, fl + 6, zc(0) - 42, zc(0) + 42, mat.graphite, g);
+    box(xa + 140, xa + 430, fl, fl + 16, zc(0) - 11, zc(0) + 11, mat.wood, g);
+    cyl(44, 40, 34, xa + 85, fl, zc(1), mat.steel, g, 28);
+    box(xa + 128, xa + 430, fl + 22, fl + 30, zc(1) - 9, zc(1) + 9, mat.steel, g);
+    box(xa + 50, xa + 400, fl, fl + 20, zc(2) - 16, zc(2) - 8, mat.steel, g);
+    box(xa + 50, xa + 400, fl, fl + 20, zc(2) + 8, zc(2) + 16, mat.steel, g);
+    box(xa + 40, xa + 140, fl, fl + 10, zc(3) - 32, zc(3) + 32, mat.wood, g);
+    box(xa + 140, xa + 420, fl, fl + 14, zc(3) - 10, zc(3) + 10, mat.wood, g);
+  } else if (kind === 'pots'){
+    const zA = iz0 + 125, zB = iz1 - 105;
+    cyl(115, 110, Math.min(140, ih - 25), xa + 170, fl, zA, mat.steel, g, 36);
+    cyl(118, 118, 10, xa + 170, fl + Math.min(140, ih - 25), zA, mat.graphite, g, 36);
+    cyl(95, 92, Math.min(120, ih - 25), xa + 170, fl, zB, mat.steel, g, 36);
+    box(xa + 320, xa + 450, fl, fl + 100, iz0 + 20, iz0 + 150, mat.white, g);
+    box(xa + 320, xa + 450, fl, fl + 100, iz1 - 150, iz1 - 20, mat.white, g);
+  } else {
+    const zc = (iz0 + iz1) / 2;
+    cyl(125, 110, 45, xa + 150, fl, zc, mat.graphite, g, 40);
+    box(xa + 270, xa + 455, fl + 30, fl + 44, zc - 14, zc + 14, mat.black, g);
+    cyl(115, 100, 42, xa + 150, fl + 45, zc, mat.graphite, g, 40);
   }
   return g;
 }
@@ -696,8 +863,11 @@ function makeLabels(key){
   add('분배기 자리 (파란 점선)', [3414, C.CT + 10, 1690], 'memo');
   if (info.dw) add(key === 'C' ? '슬림 식세기 45cm' : '식세기', [FACE_R - 5, 520, (info.dw[0] + info.dw[1]) / 2]);
   add('개수대', [FACE_R - 5, 520, info.sinkCenter]);
-  if (info.rack) add('양념망장 ' + (info.rack[1] - info.rack[0]), [C.RF - 15, CAB_TOP - 20, (info.rack[0] + info.rack[1]) / 2], 'rack', {follow:true});
-  if (key === 'B') add('양념 서랍', [C.RF - 15, 640, (info.cook[0] + info.cook[1]) / 2], 'rack', {follow:true});
+  if (info.rack) add('양념망장 ' + (info.rack[1] - info.rack[0]), [C.RF - 15, CAB_TOP - 20, (info.rack[0] + info.rack[1]) / 2], 'rack', {follow:rr.pull});
+  const cz = (info.cook[0] + info.cook[1]) / 2, dc = drawerCalc(DRAWER.d1);
+  if (key === 'B') add('양념 서랍', [C.RF - 15, dc.slots[1][1] - 40, cz], 'rack', {follow:rr.drawers[1]});
+  add('1단 조리도구', [C.RF - 15, dc.slots[0][1] - 30, cz], 'item', {follow:rr.drawers[0], showIf:() => cabT > .3});
+  add('인덕션 본체', [2965, (dc.indBottom + CAB_TOP) / 2, cz], 'item', {showIf:() => cabT > .6});
   let z = 0;
   SCHEMES[key].segs.forEach(([k, w]) => { if (k !== 'filler') dim(String(w), [C.RF - 150, 6, z + w / 2]); z += w; });
   dim('1,850', [(C.XB + C.W) / 2, 6, C.ZE + 200]);
@@ -741,7 +911,7 @@ function applyToggles(){ uppers.visible = toggles.uppers.checked; dimsGroup.visi
 Object.values(toggles).forEach(t => t.addEventListener('change', applyToggles));
 
 const pullBtn = $('#pullBtn');
-let pullT = 0, pullTarget = 0, scheme = 'base';
+let pullT = 0, pullTarget = 0, cabT = 0, cabTarget = 0, scheme = 'base';
 function updatePullBtn(){
   const p = SCHEMES[scheme].pull;
   pullBtn.hidden = !p;
@@ -751,6 +921,13 @@ function updatePullBtn(){
   pullBtn.setAttribute('aria-pressed', String(open));
 }
 pullBtn.addEventListener('click', () => { pullTarget = pullTarget > .5 ? 0 : 1; updatePullBtn(); });
+const cabBtn = $('#cabBtn');
+function updateCabBtn(){ const open = cabTarget > .5; cabBtn.textContent = open ? '인덕션 서랍 닫기' : '인덕션 서랍 열기'; cabBtn.setAttribute('aria-pressed', String(open)); }
+cabBtn.addEventListener('click', () => {
+  cabTarget = cabTarget > .5 ? 0 : 1; updateCabBtn();
+  if (cabTarget && currentView !== 'counter') flyTo('counter');
+});
+onD1Change = () => { buildRightRun(scheme); makeLabels(scheme); dirty = true; };
 
 function setScheme(key, fromUser){
   scheme = key;
@@ -801,10 +978,10 @@ function updateLabels(){
   const w = stage.clientWidth, h = stage.clientHeight;
   occluders = []; scene.traverseVisible(o => { if (o.isMesh) occluders.push(o); });
   for (const l of labels){
-    const on = (l.group === 'dims' ? toggles.dims.checked : toggles.labels.checked) && (!l.needsUppers || toggles.uppers.checked);
+    const on = (l.group === 'dims' ? toggles.dims.checked : toggles.labels.checked) && (!l.needsUppers || toggles.uppers.checked) && (!l.showIf || l.showIf());
     if (!on){ l.el.hidden = true; continue; }
     v3.set(mm(l.pos[0]), mm(l.pos[1]), mm(l.pos[2]));
-    if (l.follow && rr.pull) v3.x += rr.pull.position.x;
+    if (l.follow) v3.x += l.follow.position.x;
     if (l.kind !== 'dim'){
       dir.subVectors(v3, camera.position); const dist = dir.length(); dir.divideScalar(dist);
       ray.set(camera.position, dir); ray.near = 0; ray.far = Math.max(0, dist - 0.03);
@@ -830,12 +1007,13 @@ function tick(now){
     if (k >= 1) tween = null; changed = true;
   }
   if (controls.update()) changed = true;
-  if (Math.abs(pullT - pullTarget) > 1e-3){
-    pullT = reduceMotion ? pullTarget : pullT + (pullTarget - pullT) * .12;
-    if (Math.abs(pullT - pullTarget) < 2e-3) pullT = pullTarget;
-    changed = true;
+  const step = (t, target) => { if (Math.abs(t - target) <= 1e-3) return t; changed = true; const n = reduceMotion ? target : t + (target - t) * .12; return Math.abs(n - target) < 2e-3 ? target : n; };
+  pullT = step(pullT, pullTarget); cabT = step(cabT, cabTarget);
+  if (rr){
+    const open = [.42, .34, .26];
+    if (rr.drawers) rr.drawers.forEach((d, i) => { let o = open[i] * cabT; if (d === rr.pull) o = Math.max(o, rr.pullDist * pullT); d.position.x = -o; });
+    if (rr.pull && (!rr.drawers || rr.drawers.indexOf(rr.pull) < 0)) rr.pull.position.x = -rr.pullDist * pullT;
   }
-  if (rr && rr.pull) rr.pull.position.x = -rr.pullDist * pullT;
   if (changed || dirty){ updateWalls(); renderer.render(scene, camera); updateLabels(); dirty = false; }
 }
 
