@@ -38,6 +38,10 @@ STUCK = re.compile(
     r"확인해 ?보(고|겠|도록)|확인 ?후에?|파악해 ?보|파악(을|이|은)? ?(못|안)|자료를? ?(안|못) ?가지고|"
     r"정확(한|히)[^.\n]{0,15}(모르|기억)|(따로|별도로?|추후에?|서면으로) ?(보고|제출|말씀|설명)")
 
+# 의원별 질의 방식 지표: 수치를 묻는 질의, 전년도·반복 사안을 다시 묻는 질의
+ASK_NUMBER = re.compile(r"몇 ?(건|명|개|회|번|퍼센트|%|억|천)|얼마|비율|건수|집행률|퍼센트|[0-9]%")
+ASK_PREVIOUS = re.compile(r"(작년|지난해|전년도?|지난번|매년|해마다|계속|여러 번|몇 년째)[^.\n]{0,40}(지적|말씀드렸|요청|요구|행감|감사|질의)")
+
 # 어느 부서에나 나오는 단골 질의 주제: (이름, 질의에서 찾을 표현, 미리 준비할 것)
 TOPICS = [
     ("예산 집행·이월·불용", r"집행률|집행 ?잔액|불용|이월", "사업별 집행률, 불용·이월액과 사유, 연말 집행 전망"),
@@ -387,7 +391,8 @@ def main():
     speech_at = {(sp["uid"], sp["idx"]): sp for sp in extras["speeches"]}
     profile = defaultdict(lambda: {"name": "", "audit": defaultdict(int), "topics": defaultdict(int),
                                    "depts": defaultdict(int), "pre": 0, "preDepts": defaultdict(int),
-                                   "speeches": [], "bills": []})
+                                   "speeches": [], "bills": [], "cand": [], "n": 0, "turns": 0,
+                                   "req": 0, "num": 0, "prev": 0})
     meetings = []
     topic_stat = [{"n": 0, "depts": set(), "cand": []} for _ in TOPICS]
     lengths = []
@@ -412,6 +417,15 @@ def main():
             if t["m"] and t["k"] == "qa":
                 pf = profile[t["m"]]
                 pf["name"] = t["n"]
+                asked = "\n".join(b[2] for b in t["b"] if b[0] == "m")
+                pf["n"] += 1
+                pf["turns"] += len(t["b"])
+                pf["req"] += bool(t["r"])
+                pf["num"] += bool(ASK_NUMBER.search(asked))
+                pf["prev"] += bool(ASK_PREVIOUS.search(asked))
+                for sent in sentences(asked):
+                    if 35 <= len(sent) <= 160 and sent.endswith("?"):
+                        pf["cand"].append((year, t["d"][0], sent))
                 if audit:
                     pf["audit"][year] += 1
                     for i in t["tp"]:
@@ -472,6 +486,24 @@ def main():
         if report.get("kind") == "plan" and (folder / "done").exists():
             plans.append(plan_of(report, folder, name_to_code))
     top = lambda counts, n: sorted(counts.items(), key=lambda kv: -kv[1])[:n]
+
+    def samples(cand):
+        """최근 것부터, 부서가 겹치지 않게 실제 질의 문장을 고른다(모의 감사의 말투·관심사 참고용)."""
+        picked, seen = [], set()
+        for year, dept, sent in sorted(cand, key=lambda c: (-c[0], -len(c[2]))):
+            if dept in seen:
+                continue
+            seen.add(dept)
+            picked.append({"y": year, "d": dept, "s": sent})
+            if len(picked) == 8:
+                break
+        return picked
+
+    def style(pf):
+        n = pf["n"] or 1
+        pct = lambda v: round(v * 100 / n)
+        return {"n": pf["n"], "turns": round(pf["turns"] / n), "req": pct(pf["req"]),
+                "num": pct(pf["num"]), "prev": pct(pf["prev"])}
     members = {}
     for code, pf in profile.items():
         if code not in current:
@@ -481,6 +513,7 @@ def main():
             "depts": top(pf["depts"], 6), "pre": pf["pre"], "preDepts": top(pf["preDepts"], 6),
             "speeches": sorted(pf["speeches"], key=lambda x: x["date"], reverse=True),
             "bills": sorted(pf["bills"], key=lambda x: x["date"], reverse=True),
+            "style": style(pf), "q": samples(pf["cand"]),
         }
     for code, name in current.items():
         members.setdefault(code, {"name": name, "audit": {}, "topics": [], "depts": [], "pre": 0,

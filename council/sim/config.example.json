@@ -1,0 +1,5 @@
+{
+  "base_url": "https://factchat-cloud.mindlogic.ai/v1/gateway",
+  "api_key": "여기에 발급받은 API 키",
+  "model": "여기에 사용할 모델 이름"
+}

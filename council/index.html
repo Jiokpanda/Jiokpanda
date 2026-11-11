@@ -82,6 +82,13 @@ td button.name { background: none; border: 0; padding: 0; color: var(--accent); 
 .item .meta button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; }
 .item.promise { border-left: 4px solid var(--accent); }
 .item.request { border-left: 4px solid var(--warn); }
+.preview pre { white-space: pre-wrap; font: 13px/1.6 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 360px; overflow: auto; }
+.simbox { padding: 12px 0 0; }
+.simbox .filters { margin: 0; }
+label.check { font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.filters label.check input { flex: 0 0 auto; min-width: 0; padding: 0; }
+code { font: 13px ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+button[disabled] { opacity: .5; cursor: default; }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; margin-left: 6px; }
 .item.member .asked { color: var(--text); }
 .item.member .tag { margin-left: 0; }
@@ -241,6 +248,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     var d = b.getAttribute("data-dept");
     if (selected[d]) delete selected[d]; else selected[d] = true;
     state.year = ""; state.member = ""; state.limit = 30; state.committee = undefined;
+    sim.messages = []; sim.member = ""; sim.error = "";
     renderChips();
     loadAndRender();
   });
@@ -270,6 +278,84 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     var my = ++runId;
     out.innerHTML = '<p class="empty">회의록을 불러오는 중입니다…</p>';
     Promise.all(Object.keys(uids).map(load)).then(function () { if (my === runId) render(); });
+  }
+
+  /* ---------- 감사 일정에서 부서 찾기 ---------- */
+  function findHits(keys) {
+    var hits = [];
+    MEMBERS.plans.forEach(function (pl, pi) {
+      pl.days.forEach(function (d) {
+        // 일정표의 기관명과 같거나, 그 기관의 하위 조직(예: 용인도시공사 → 용인도시공사경영기획본부)이면 연결한다.
+        var match = d.keys.some(function (k) {
+          return keys[k] || (k.length >= 5 && !/^(처인|기흥|수지)구$/.test(k) &&
+            Object.keys(keys).some(function (sk) { return sk.indexOf(k) === 0; }));
+        });
+        if (match) hits.push({ pl: pl, pi: pi, d: d });
+      });
+    });
+    return hits;
+  }
+
+  /* ---------- 모의 감사(AI) ---------- */
+  // sim/server.py 로 연 화면에서만 동작한다. API 키는 서버 쪽에만 있고 화면은 대화 내용만 주고받는다.
+  var sim = { ready: null, status: null, member: "", alias: true, messages: [], busy: false, error: "", draft: "", prompt: "" };
+  function simCheck() {
+    if (location.protocol === "file:") { sim.ready = false; return; }
+    fetch("/api/status").then(function (r) { return r.json(); }).then(function (j) {
+      sim.ready = !!j.ok; sim.status = j; if (state.tab === "sim") render();
+    }).catch(function () { sim.ready = false; if (state.tab === "sim") render(); });
+  }
+  // AI에 보내기 전에 의원 실명을 가명으로 바꾸고, 주민번호·전화번호·전자우편 모양의 글자는 지운다.
+  function scrub(text, code) {
+    var t = String(text);
+    if (sim.alias) {
+      Object.keys(IDX.currentMembers).forEach(function (c) {
+        var re = new RegExp(IDX.currentMembers[c] + "( ?(위원장|위원|의원))?", "g");
+        t = t.replace(re, c === code ? "위원 A" : "다른 위원");
+      });
+    }
+    return t.replace(/\d{6}-?[1-4]\d{6}/g, "(삭제)").replace(/0\d{1,2}[-) ]?\d{3,4}-?\d{4}/g, "(삭제)")
+      .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "(삭제)");
+  }
+  function simPrompt(c) {
+    var who = sim.alias ? "위원 A" : c.pm.name + " 위원";
+    var list = function (title, items) { return items.length ? "\n[" + title + "]\n" + items.map(function (x) { return "- " + x; }).join("\n") + "\n" : ""; };
+    var st = c.mb.style || { n: 0 };
+    var text = "지방의회 행정사무감사 모의 연습입니다. 당신은 감사위원 역할을 맡아 피감 부서 담당자(사용자)에게 질의합니다. " +
+      "이 대화는 실제 의원의 발언이 아니라, 공개된 회의록의 질의 경향을 참고한 연습용 모의 질의입니다.\n" +
+      "\n[진행 방식]\n" +
+      "- 한 번에 질문 하나만, 2~4문장으로 묻습니다.\n" +
+      "- 답변이 모호하거나 수치·근거가 없으면 같은 사안을 다시 묻고, 충분하면 다음 쟁점으로 넘어갑니다.\n" +
+      "- 아래 자료에 있는 내용만 근거로 삼습니다. 자료에 없는 사실이나 수치를 지어내지 말고, 필요한 수치는 질문으로 묻습니다.\n" +
+      "- 회의록에서 쓰는 말투로 묻습니다(예: ~했는데요, ~아닌가요?, ~해 주시기 바랍니다).\n" +
+      "- 사용자가 '강평'이라고 하면 질의를 멈추고 지금까지의 답변을 평가합니다: 잘한 점, 보완할 점, 미리 준비할 자료.\n" +
+      "\n[피감 부서] " + c.depts.join(", ") + "\n" +
+      "\n[감사위원의 질의 경향] " + who + (c.pm.role !== "위원" ? " (" + c.pm.role + ")" : "") + "\n" +
+      (c.mb.topics.length ? "- 자주 다룬 주제: " + c.mb.topics.map(function (x) { return x[0]; }).join(", ") + "\n" : "") +
+      (st.n ? "- 질의 방식: 수치를 묻는 질의 " + st.num + "%, 자료를 요구하는 질의 " + st.req + "%, 전년도 사안을 다시 묻는 질의 " + st.prev +
+        "%, 한 사안당 문답 평균 " + st.turns + "회\n" : "- 지난 행정사무감사 질의 기록이 적어 일반적인 감사위원의 방식으로 묻습니다.\n") +
+      list("이 위원의 실제 질의 예시(말투와 관심사 참고용)", (c.mb.q || []).slice(0, 6).map(function (x) { return x.s; })) +
+      list("이 위원이 이 부서에 했던 질의", c.own) +
+      list("전년도 결과보고서 지적사항", c.findings) +
+      list("전년도 감사에서 부서가 약속한 답변", c.promises) +
+      list("올해 회의에서 이 부서가 받은 질의", c.pre) +
+      list("전년도 감사에서 즉답하지 못한 질문", c.stuck) +
+      "\n위 자료에서 쟁점을 골라 첫 질의를 시작해 주세요.";
+    return scrub(text, c.pm.code);
+  }
+  function simCall() {
+    sim.busy = true; sim.error = ""; render();
+    fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: sim.messages }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j.text) sim.messages.push({ role: "assistant", content: j.text });
+        else { sim.error = (j.error || "응답을 받지 못했습니다.") + (j.detail ? "\n" + j.detail : ""); if (sim.messages.length && sim.messages[sim.messages.length - 1].role === "user") sim.draft = sim.messages.pop().content; }
+      })
+      .catch(function (e) { sim.error = "로컬 서버에 연결하지 못했습니다. sim/server.py 가 실행 중인지 확인해 주세요. (" + e + ")"; })
+      .then(function () {
+        sim.busy = false; render();
+        var end = document.getElementById("simend"); if (end) end.scrollIntoView({ block: "nearest" });
+      });
   }
 
   /* ---------- 브리핑 만들기 ---------- */
@@ -391,6 +477,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     var tabs = [["check", "조치 점검표"]]
       .concat(MEMBERS.plans.length ? [["panel", "감사위원"]] : [])
       .concat(pre.length ? [["pre", "올해 질의 " + pre.length]] : [])
+      .concat(MEMBERS.plans.length ? [["sim", "모의 감사"]] : [])
       .concat([["topic", "단골 질문"], ["stuck", "막혔던 질문 " + stuck.length], null])
       .concat(FINDINGS.length ? [["finding", "지적사항 " + findings.length]] : [])
       .concat([["promise", "약속 답변 " + promises.length], ["request", "자료 요구 " + requests.length], ["all", "문답 전문 " + all.length]]);
@@ -416,7 +503,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       h += '<div class="filters"><select id="fmember" aria-label="의원"><option value="">전체 의원</option>' +
         Object.keys(preAskers).map(function (c) { return '<option value="' + c + '"' + (state.member === c ? " selected" : "") + ">" + esc(preAskers[c]) + "</option>"; }).join("") + "</select>" +
         '<input id="fword" type="search" placeholder="내용에서 찾기 (예: 예산, 민원)" value="' + esc(state.word) + '" aria-label="내용에서 찾기"></div>';
-    } else if (state.tab !== "topic" && state.tab !== "panel") h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
+    } else if (state.tab !== "topic" && state.tab !== "panel" && state.tab !== "sim") h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
       ys.map(function (y) { return '<option value="' + y + '"' + (state.year === y ? " selected" : "") + ">" + y + "년</option>"; }).join("") + "</select>" +
       (state.tab === "finding"
         ? '<select id="fkind" aria-label="조치 구분"><option value="">전체 구분</option>' +
@@ -491,19 +578,62 @@ footer ul { padding-left: 18px; margin: 6px 0; }
           (x.ours.length ? '<div class="meta"><button type="button" data-topic="' + x.i + '">우리 부서가 받은 문답 ' + x.ours.length + "건 보기</button></div>" +
             '<div data-tslot="' + x.i + '"></div>' : "") + "</div>";
       });
+    } else if (state.tab === "sim") {
+      plain = true;
+      body = '<p class="hint"><strong>실제 의원의 발언이 아닙니다.</strong> 공개 회의록의 질의 경향을 참고해 AI가 만드는 연습용 질의입니다. 내부 준비용으로만 쓰고, 답변에는 개인정보나 비공개 자료를 적지 마세요.</p>';
+      if (sim.ready === null) { simCheck(); body += '<p class="empty">AI 연결을 확인하는 중입니다…</p>'; }
+      if (sim.ready === false) {
+        body += '<div class="item"><div class="quote"><strong>모의 감사는 로컬 서버로 열어야 합니다</strong></div>' +
+          '<div class="asked">1. <code>sim/config.example.json</code>을 <code>sim/config.json</code>으로 복사하고 API 키와 모델 이름을 넣습니다.</div>' +
+          '<div class="asked">2. 이 폴더에서 <code>python sim/server.py</code>를 실행합니다.</div>' +
+          '<div class="asked">3. 브라우저에서 <code>http://127.0.0.1:8765</code>를 엽니다.</div><div class="meta"></div></div>';
+      } else if (sim.ready) {
+        var sHits = findHits(keys);
+        var sPi = state.committee !== undefined && MEMBERS.plans[state.committee] ? Number(state.committee) : (sHits.length ? sHits[0].pi : 0);
+        var sPlan = MEMBERS.plans[sPi];
+        var sPm = sPlan.members.filter(function (x) { return x.code === sim.member; })[0] || sPlan.members[0];
+        sim.code = sPm.code;
+        var sMb = MEMBERS.members[sPm.code] || { topics: [], q: [], style: { n: 0 } };
+        var firstAsk = function (r) {
+          for (var k = 0; k < r.t.b.length; k++) if (r.t.b[k][0] === "m" && r.t.b[k][2].length > 30) return r.t.b[k][2].replace(/\n/g, " ").slice(0, 200);
+          return "";
+        };
+        var latest = function (list, year, n, text) { return list.filter(year).slice(0, n).map(text).filter(Boolean); };
+        sim.prompt = simPrompt({
+          depts: depts, pm: sPm, mb: sMb,
+          own: qa.concat(pre).filter(function (r) { return r.t.m === sPm.code; }).slice(0, 5).map(firstAsk).filter(Boolean),
+          findings: findings.filter(function (f) { return String(f.y) === cy; })
+            .sort(function (a, b) { return (b.k === "시정") - (a.k === "시정"); }).slice(0, 12).map(function (f) { return "(" + f.k + ") " + f.t; }),
+          promises: latest(promises, function (x) { return String(x.r.m.year) === cy; }, 8, function (x) { return x.s; }),
+          pre: pre.slice(0, 6).map(firstAsk).filter(Boolean),
+          stuck: stuck.slice(0, 5).map(function (x) { return askedBefore(x.r, x.idx).asked; }).filter(Boolean)
+        });
+        var started = sim.messages.length > 0;
+        body += '<div class="filters"><select id="fcommittee" aria-label="위원회">' + MEMBERS.plans.map(function (pl, i) {
+            return '<option value="' + i + '"' + (i === sPi ? " selected" : "") + ">" + esc(pl.name) + "</option>";
+          }).join("") + '</select><select id="simmember" aria-label="감사위원">' + sPlan.members.map(function (x) {
+            return '<option value="' + x.code + '"' + (x.code === sPm.code ? " selected" : "") + ">" + esc(x.name) + " " + esc(x.role) + "</option>";
+          }).join("") + '</select><label class="check"><input type="checkbox" id="simalias"' + (sim.alias ? " checked" : "") + "> 의원 이름을 ‘위원 A’로 바꿔 보내기</label>" +
+          '<button class="printbtn" type="button" id="simstart"' + (sim.busy ? " disabled" : "") + ">" + (started ? "새로 시작" : "모의 감사 시작") + "</button></div>";
+        if (sim.status && !sim.status.configured) body += '<p class="hint">API 키가 설정되지 않았습니다. <code>sim/config.json</code>에 api_key와 model을 넣고 서버를 다시 실행해 주세요.</p>';
+        body += '<details class="examples preview"><summary>AI에 보내는 내용 미리보기 (' + sim.prompt.length.toLocaleString() + "자" +
+          (sim.status ? " · " + esc(sim.status.service) + (sim.status.model ? " · " + esc(sim.status.model) : "") : "") + ")</summary><pre>" + esc(sim.prompt) + "</pre></details>";
+        var role = "모의 질의 (AI 생성) · " + esc(sPm.name) + " " + esc(sPm.role) + " 역할";
+        sim.messages.forEach(function (m, i) {
+          if (m.role === "system" || i === 1) return;
+          var review = m.role === "assistant" && sim.messages[i - 1].content === "강평";
+          body += '<div class="say ' + (m.role === "assistant" ? "m" : "o") + '"><b>' + (review ? "강평 (AI 생성)" : m.role === "assistant" ? role : "내 답변") + "</b>" + esc(m.content) + "</div>";
+        });
+        if (sim.busy) body += '<p class="empty">AI가 답을 쓰는 중입니다…</p>';
+        if (sim.error) body += '<div class="item request"><div class="quote">' + esc(sim.error).replace(/\n/g, "<br>") + '</div><div class="asked">보안 프로그램이 전송을 막은 경우 여기에 그 응답이 표시됩니다. ‘보내는 내용 미리보기’에서 문제가 될 만한 내용을 확인해 주세요.</div><div class="meta"></div></div>';
+        if (started) body += '<div class="cform wide simbox"><textarea id="simanswer" rows="4" placeholder="답변을 입력하세요"' + (sim.busy ? " disabled" : "") + ">" + esc(sim.draft) + "</textarea>" +
+          '<div class="filters"><button class="printbtn" type="button" id="simsend"' + (sim.busy ? " disabled" : "") + '>답변 보내기</button>' +
+          '<button class="printbtn" type="button" id="simreview"' + (sim.busy ? " disabled" : "") + ">강평 받기</button></div></div>";
+        body += '<div id="simend"></div>';
+      }
     } else if (state.tab === "panel") {
       plain = true;
-      var hits = [];   // 고른 부서가 들어 있는 감사 일정
-      MEMBERS.plans.forEach(function (pl, pi) {
-        pl.days.forEach(function (d) {
-          // 일정표의 기관명과 같거나, 그 기관의 하위 조직(예: 용인도시공사 → 용인도시공사경영기획본부)이면 연결한다.
-          var match = d.keys.some(function (k) {
-            return keys[k] || (k.length >= 5 && !/^(처인|기흥|수지)구$/.test(k) &&
-              Object.keys(keys).some(function (sk) { return sk.indexOf(k) === 0; }));
-          });
-          if (match) hits.push({ pl: pl, pi: pi, d: d });
-        });
-      });
+      var hits = findHits(keys);
       var pi = state.committee !== undefined && MEMBERS.plans[state.committee] ? Number(state.committee) : (hits.length ? hits[0].pi : 0);
       var plan = MEMBERS.plans[pi];
       body = '<div class="filters"><select id="fcommittee" aria-label="위원회">' + MEMBERS.plans.map(function (pl, i) {
@@ -628,6 +758,19 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     }
     if (el.id === "more") { state.limit += 50; render(); return; }
     if (el.id === "csv") { exportCsv(); return; }
+    if (el.id === "simstart") {
+      sim.draft = ""; sim.error = "";
+      sim.messages = [{ role: "system", content: sim.prompt }, { role: "user", content: "감사를 시작해 주세요." }];
+      simCall(); return;
+    }
+    if (el.id === "simsend" || el.id === "simreview") {
+      var answer = el.id === "simreview" ? "강평" : ($("simanswer").value || "").trim();
+      if (!answer) return;
+      sim.draft = "";
+      // 답변에 섞인 전화번호·주민번호·전자우편 모양의 글자와 의원 실명도 같은 규칙으로 걸러서 보낸다.
+      sim.messages.push({ role: "user", content: scrub(answer, sim.code) });
+      simCall(); return;
+    }
     if (el.hasAttribute("data-topic")) {
       var ti = el.getAttribute("data-topic"), tslot = out.querySelector('[data-tslot="' + ti + '"]');
       if (tslot.innerHTML) tslot.innerHTML = "";
@@ -663,13 +806,16 @@ footer ul { padding-left: 18px; margin: 6px 0; }
   out.addEventListener("change", function (e) {
     if (saveField(e.target)) return;
     if (e.target.id === "fyear") { state.year = e.target.value; state.limit = 30; render(); }
-    if (e.target.id === "fcommittee") { state.committee = e.target.value; render(); }
+    if (e.target.id === "fcommittee") { state.committee = e.target.value; sim.member = ""; sim.messages = []; render(); }
+    if (e.target.id === "simmember") { sim.member = e.target.value; sim.messages = []; sim.error = ""; render(); }
+    if (e.target.id === "simalias") { sim.alias = e.target.checked; sim.messages = []; render(); }
     if (e.target.id === "fkind") { state.kind = e.target.value; state.limit = 30; render(); }
     if (e.target.id === "fmember") { state.member = e.target.value; state.limit = 30; render(); }
   });
   var timer;
   out.addEventListener("input", function (e) {
     if (saveField(e.target)) return;
+    if (e.target.id === "simanswer") { sim.draft = e.target.value; return; }
     if (e.target.id !== "fword") return;
     clearTimeout(timer);
     var v = e.target.value;
