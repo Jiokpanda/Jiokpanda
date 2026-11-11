@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>행감 대비 브리핑</title>
+<style>
+:root {
+  --bg: #f4f5f2; --surface: #ffffff; --line: #dcdfd8; --text: #1c2421; --muted: #5d6965;
+  --accent: #0f5c56; --accent-soft: #e2efec; --warn: #9a4a10; --warn-soft: #fbeedd;
+  --mark: #ffe58a; --member: #f1f4f8; --official: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141917; --surface: #1c2321; --line: #313b38; --text: #e6ebe8; --muted: #9aa7a2;
+    --accent: #6fc9bd; --accent-soft: #1f3532; --warn: #f0b072; --warn-soft: #3a2a18;
+    --mark: #7a6410; --member: #232c31; --official: #1c2321;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.65 "Pretendard", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  word-break: keep-all; overflow-wrap: anywhere;
+}
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 16px 80px; }
+header.top { padding: 36px 0 20px; }
+header.top h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; text-wrap: balance; }
+header.top p { margin: 6px 0 0; color: var(--muted); max-width: 60ch; }
+a { color: var(--accent); }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.search { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.search label { display: block; font-weight: 700; margin-bottom: 8px; }
+.search input[type=search] {
+  width: 100%; padding: 12px 14px; font: inherit; color: inherit; background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px;
+}
+.hint { color: var(--muted); font-size: 14px; margin: 10px 0 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
+  padding: 4px 12px; font-size: 14px; line-height: 1.5;
+}
+.chip small { color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.chip[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.chip[aria-pressed=true] small { color: inherit; opacity: .8; }
+
+h2 { font-size: 20px; margin: 36px 0 10px; letter-spacing: -0.01em; }
+h2 small { font-weight: 400; color: var(--muted); font-size: 14px; margin-left: 6px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 20px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.stat b { display: block; font-size: 26px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 14px; }
+
+.tablebox { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+thead th { color: var(--muted); font-weight: 600; font-size: 13px; }
+tbody tr:last-child td { border-bottom: 0; }
+td button.name { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; }
+.badge { display: inline-block; font-size: 12px; padding: 0 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; }
+
+.tabs { display: flex; gap: 4px; margin-top: 36px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { border: 0; background: none; padding: 10px 14px; border-bottom: 3px solid transparent; color: var(--muted); white-space: nowrap; }
+.tabs button[aria-selected=true] { color: var(--text); font-weight: 700; border-bottom-color: var(--accent); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0; }
+.filters select, .filters input { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.filters input { flex: 1 1 180px; min-width: 0; }
+.count { color: var(--muted); font-size: 14px; }
+
+.year { font-size: 15px; color: var(--muted); font-weight: 700; margin: 22px 0 8px; }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+.item .quote { padding: 12px 14px 4px; }
+.item .asked { padding: 10px 14px 0; color: var(--muted); font-size: 14px; }
+.item .asked + .quote { padding-top: 4px; }
+.item .asked b, .item .quote b { font-size: 12px; font-weight: 700; color: var(--muted); margin-right: 6px; }
+.item .meta { padding: 0 14px 10px; color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.item .meta button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; }
+.item.promise { border-left: 4px solid var(--accent); }
+.item.request { border-left: 4px solid var(--warn); }
+details.thread > summary { list-style: none; cursor: pointer; padding: 12px 14px; }
+details.thread > summary::-webkit-details-marker { display: none; }
+details.thread > summary .who { font-weight: 700; }
+details.thread > summary .lead { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
+details.thread[open] > summary { border-bottom: 1px solid var(--line); }
+.tag { display: inline-block; font-size: 12px; padding: 0 7px; border-radius: 4px; background: var(--warn-soft); color: var(--warn); margin-left: 6px; font-weight: 400; }
+.talk { padding: 4px 14px 12px; }
+.say { padding: 10px 12px; border-radius: 8px; margin-top: 8px; white-space: pre-line; max-width: 75ch; }
+.say.m { background: var(--member); }
+.say.o { background: var(--official); border: 1px solid var(--line); margin-left: 20px; }
+.say b { display: block; font-size: 13px; color: var(--muted); }
+mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; }
+.more { display: block; margin: 12px auto; padding: 8px 20px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; }
+.empty { color: var(--muted); padding: 24px 0; }
+footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+footer ul { padding-left: 18px; margin: 6px 0; }
+.printbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 14px; font-size: 14px; }
+.titlebar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 28px; }
+.titlebar h2 { margin: 0; font-size: 24px; }
+@media print {
+  body { background: #fff; font-size: 11pt; }
+  .search, .tabs, .filters, .printbtn, .more { display: none !important; }
+  .item, .stat, .tablebox { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>행감 대비 브리핑</h1>
+    <p>용인특례시의회가 공개한 행정사무감사 회의록에서, 우리 부서가 받은 질의와 답변을 모아 보여 줍니다.</p>
+  </header>
+
+  <section class="search">
+    <label for="q">부서명</label>
+    <input id="q" type="search" placeholder="예: 도서관정책과, 행정과, 처인구보건소" autocomplete="off">
+    <p class="hint" id="hint"></p>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <main id="out"></main>
+
+  <footer>
+    <strong>자료 출처와 유의사항</strong>
+    <ul>
+      <li>출처: <a href="https://council.yongin.go.kr/kr/minutes/search.do" target="_blank" rel="noopener">용인특례시의회 회의록</a> 중 행정사무감사 회의록. <span id="gen"></span></li>
+      <li>부서는 답변자의 직함(예: “행정과장”)으로 구분합니다. 조직 개편으로 이름이 바뀐 부서는 옛 이름도 함께 골라 주세요.</li>
+      <li>‘약속·검토 답변’과 ‘자료 요구’는 문장 표현을 기준으로 자동으로 골라낸 것이라 빠지거나 잘못 잡힌 것이 있을 수 있습니다. 중요한 내용은 ‘원문’에서 확인하세요.</li>
+      <li>연도별 감사 계획서와 결과보고서는 <a href="https://council.yongin.go.kr/kr/inspectionBBS.do" target="_blank" rel="noopener">의회 행정사무감사 게시판</a>에 있습니다.</li>
+    </ul>
+  </footer>
+</div>
+
+<script src="data/index.js"></script>
+<script>
+(function () {
+  "use strict";
+  var IDX = window.COUNCIL_INDEX;
+  var SITE = "https://council.yongin.go.kr";
+  var $ = function (id) { return document.getElementById(id); };
+  var out = $("out");
+  if (!IDX) {
+    out.innerHTML = '<p class="empty">자료 파일(data/index.js)을 찾지 못했습니다. collector 폴더의 collect.py와 build.py를 차례로 실행해 주세요.</p>';
+    return;
+  }
+  var meetingByUid = {};
+  IDX.meetings.forEach(function (m) { meetingByUid[m.uid] = m; });
+  var years = IDX.meetings.map(function (m) { return m.year; });
+  $("gen").textContent = Math.min.apply(null, years) + "~" + Math.max.apply(null, years) + "년 회의록 " +
+    IDX.meetings.length + "건, " + IDX.generated + " 기준.";
+
+  var selected = {};          // 고른 부서명
+  var loaded = {};            // 회의록 uid → 자료
+  var state = { tab: "promise", year: "", member: "", word: "", limit: 30 };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
+  }
+  function norm(s) { return s.replace(/\s+/g, "").toLowerCase(); }
+  function hl(text, word) {
+    var safe = esc(text);
+    if (!word) return safe;
+    var re = new RegExp(esc(word).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
+    return safe.replace(re, function (m) { return "<mark>" + m + "</mark>"; });
+  }
+
+  /* ---------- 부서 고르기 ---------- */
+  var deptNames = Object.keys(IDX.depts);
+  function deptYears(d) {
+    var ys = Object.keys(IDX.depts[d].years).sort();
+    return ys.length ? (ys[0] === ys[ys.length - 1] ? ys[0] : ys[0] + "~" + ys[ys.length - 1].slice(2)) : "";
+  }
+  function renderChips() {
+    var q = norm($("q").value);
+    var list;
+    if (q) {
+      list = deptNames.filter(function (d) { return norm(d).indexOf(q) >= 0; });
+      $("hint").textContent = list.length ? "이름에 검색어가 들어간 부서입니다. 눌러서 고르세요(여러 개 가능)." : "해당하는 부서가 없습니다. 이름의 일부만 넣어 보세요.";
+    } else {
+      list = deptNames.slice().sort(function (a, b) { return IDX.depts[b].n - IDX.depts[a].n; }).slice(0, 24);
+      $("hint").textContent = "부서명을 입력하거나, 질의가 많았던 부서에서 고르세요.";
+    }
+    Object.keys(selected).forEach(function (d) { if (list.indexOf(d) < 0) list.unshift(d); });
+    list.sort(function (a, b) { return (selected[b] ? 1 : 0) - (selected[a] ? 1 : 0) || IDX.depts[b].n - IDX.depts[a].n; });
+    $("chips").innerHTML = list.slice(0, 60).map(function (d) {
+      return '<button class="chip" type="button" aria-pressed="' + (selected[d] ? "true" : "false") + '" data-dept="' + esc(d) + '">' +
+        esc(d) + "<small>" + IDX.depts[d].n + "건 · " + deptYears(d) + "</small></button>";
+    }).join("");
+  }
+  $("q").addEventListener("input", renderChips);
+  $("chips").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-dept]");
+    if (!b) return;
+    var d = b.getAttribute("data-dept");
+    if (selected[d]) delete selected[d]; else selected[d] = true;
+    state.year = ""; state.member = ""; state.limit = 30;
+    renderChips();
+    loadAndRender();
+  });
+
+  /* ---------- 회의록 자료 불러오기 ---------- */
+  var waiting = {};
+  window.COUNCIL_MEETING = function (uid, data) {
+    loaded[uid] = data;
+    if (waiting[uid]) { waiting[uid](); delete waiting[uid]; }
+  };
+  function load(uid) {
+    return new Promise(function (resolve) {
+      if (loaded[uid]) return resolve();
+      waiting[uid] = resolve;
+      var s = document.createElement("script");
+      s.src = "data/m/" + uid + ".js";
+      s.onerror = function () { loaded[uid] = { threads: [] }; resolve(); };
+      document.head.appendChild(s);
+    });
+  }
+  var runId = 0;
+  function loadAndRender() {
+    var depts = Object.keys(selected);
+    if (!depts.length) { out.innerHTML = ""; return; }
+    var uids = {};
+    depts.forEach(function (d) { IDX.depts[d].uids.forEach(function (u) { uids[u] = true; }); });
+    var my = ++runId;
+    out.innerHTML = '<p class="empty">회의록을 불러오는 중입니다…</p>';
+    Promise.all(Object.keys(uids).map(load)).then(function () { if (my === runId) render(); });
+  }
+
+  /* ---------- 브리핑 만들기 ---------- */
+  function collect() {
+    var depts = Object.keys(selected), rows = [];
+    var uids = {};
+    depts.forEach(function (d) { IDX.depts[d].uids.forEach(function (u) { uids[u] = true; }); });
+    Object.keys(uids).forEach(function (u) {
+      var m = meetingByUid[u];
+      (loaded[u] ? loaded[u].threads : []).forEach(function (t) {
+        if (t.d.some(function (d) { return selected[d]; })) rows.push({ m: m, t: t });
+      });
+    });
+    rows.sort(function (a, b) { return b.m.date.localeCompare(a.m.date) || a.t.i - b.t.i; });
+    return rows;
+  }
+  function memberLink(m, t, idx) {
+    return SITE + "/viewer/minutes.do?uid=" + m.uid + (t.m ? "&mem_sch=" + t.m + "&con_idx_sch=" + idx : "");
+  }
+  function phraseLink(m, sentence) {
+    var runs = sentence.match(/[가-힣0-9]+(?: [가-힣0-9]+)*/g) || [];
+    var best = runs.sort(function (a, b) { return b.length - a.length; })[0] || "";
+    var words = best.split(" "), phrase = "";
+    for (var i = 0; i < words.length && (phrase + " " + words[i]).length <= 22; i++) phrase = (phrase ? phrase + " " : "") + words[i];
+    if (!phrase) phrase = words[0] || "";
+    return SITE + "/viewer/minutes.do?uid=" + m.uid + (phrase ? "&schwrd=" + encodeURIComponent('"' + phrase + '"') : "");
+  }
+  function where(m) {
+    return m.date + " · " + m.committee + " " + m.day + (m.target && m.target !== "없음" ? " (" + m.target + ")" : "");
+  }
+  function asker(t) {
+    if (!t.n) return "위원장 진행";
+    return (t.k === "qa" ? t.n + " 위원" : t.n + " 위원장") + (IDX.currentMembers[t.m] ? '<span class="badge">현역</span>' : "");
+  }
+  function threadHtml(r, open) {
+    var t = r.t, first = "";
+    for (var i = 0; i < t.b.length; i++) if (t.b[i][0] === "m") { first = t.b[i][2]; break; }
+    if (!first) first = t.b[0][2];
+    var lead = first.replace(/\n/g, " ");
+    if (lead.length > 110) lead = lead.slice(0, 110) + "…";
+    var talk = t.b.map(function (b) {
+      return '<div class="say ' + b[0] + '"><b>' + esc(b[1]) + "</b>" + hl(b[2], state.word) + "</div>";
+    }).join("");
+    return '<details class="item thread"' + (open ? " open" : "") + "><summary>" +
+      '<span class="who">' + asker(t) + "</span>" + (t.k === "report" ? '<span class="tag">업무보고</span>' : t.k === "chair" ? '<span class="tag">위원장 진행</span>' : "") +
+      ' <span class="count">' + esc(where(r.m)) + " · 발언 " + t.b.length + "개</span>" +
+      '<span class="lead">' + hl(lead, state.word) + "</span></summary>" +
+      '<div class="talk">' + talk +
+      '<p class="count"><a href="' + esc(memberLink(r.m, t, t.i)) + '" target="_blank" rel="noopener">의회 홈페이지에서 원문 보기</a></p></div></details>';
+  }
+
+  function render() {
+    var depts = Object.keys(selected);
+    var all = collect();
+    var qa = all.filter(function (r) { return r.t.k === "qa"; });
+    var talks = all.filter(function (r) { return r.t.k !== "report"; });
+    var yearSet = {}, memberStat = {};
+    qa.forEach(function (r) {
+      yearSet[r.m.year] = (yearSet[r.m.year] || 0) + 1;
+      if (!r.t.m) return;
+      var s = memberStat[r.t.m] || (memberStat[r.t.m] = { name: r.t.n, total: 0, y: {} });
+      s.total++; s.y[r.m.year] = (s.y[r.m.year] || 0) + 1;
+    });
+    var ys = Object.keys(yearSet).sort().reverse();
+    var promises = [], requests = [];
+    talks.forEach(function (r) {
+      r.t.p.forEach(function (p) { if (selected[p[0]]) promises.push({ r: r, dept: p[0], s: p[1], idx: p[2] }); });
+      r.t.r.forEach(function (q) { requests.push({ r: r, s: q[0], idx: q[1] }); });
+    });
+
+    var h = '<div class="titlebar"><h2>' + esc(depts.join(", ")) + '</h2><button class="printbtn" type="button" id="print">인쇄</button></div>';
+    h += '<div class="stats">' +
+      '<div class="stat"><b>' + qa.length + "</b><span>의원 질의 묶음" + (ys.length ? " (" + (ys.length > 1 ? ys[ys.length - 1] + "~" : "") + ys[0] + "년)" : "") + "</span></div>" +
+      '<div class="stat"><b>' + Object.keys(memberStat).length + "</b><span>질의한 의원</span></div>" +
+      '<div class="stat"><b>' + promises.length + "</b><span>약속·검토 답변</span></div>" +
+      '<div class="stat"><b>' + requests.length + "</b><span>자료 요구 발언</span></div></div>";
+
+    var members = Object.keys(memberStat).map(function (c) { return { code: c, s: memberStat[c] }; })
+      .sort(function (a, b) {
+        return (IDX.currentMembers[b.code] ? 1 : 0) - (IDX.currentMembers[a.code] ? 1 : 0) || b.s.total - a.s.total;
+      });
+    if (members.length) {
+      h += "<h2>누가 물었나<small>현역 의원을 먼저 보여 줍니다. 이름을 누르면 그 의원의 질의만 봅니다.</small></h2>";
+      h += '<div class="tablebox"><table><thead><tr><th>의원</th>' + ys.map(function (y) { return "<th>" + y + "</th>"; }).join("") + "<th>합계</th></tr></thead><tbody>";
+      members.forEach(function (x) {
+        h += '<tr><td><button class="name" type="button" data-member="' + x.code + '">' + esc(x.s.name) + "</button>" +
+          (IDX.currentMembers[x.code] ? '<span class="badge">현역</span>' : "") + "</td>" +
+          ys.map(function (y) { return "<td>" + (x.s.y[y] || "") + "</td>"; }).join("") + "<td>" + x.s.total + "</td></tr>";
+      });
+      h += "</tbody></table></div>";
+    }
+
+    var tabs = [["promise", "약속·검토 답변 " + promises.length], ["request", "자료 요구 " + requests.length], ["all", "질의·답변 전문 " + all.length]];
+    h += '<div class="tabs" role="tablist">' + tabs.map(function (t) {
+      return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (state.tab === t[0]) + '">' + t[1] + "</button>";
+    }).join("") + "</div>";
+
+    h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
+      ys.map(function (y) { return '<option value="' + y + '"' + (state.year === y ? " selected" : "") + ">" + y + "년</option>"; }).join("") + "</select>" +
+      '<select id="fmember" aria-label="의원"><option value="">전체 의원</option>' +
+      members.map(function (x) { return '<option value="' + x.code + '"' + (state.member === x.code ? " selected" : "") + ">" + esc(x.s.name) + "</option>"; }).join("") + "</select>" +
+      '<input id="fword" type="search" placeholder="내용에서 찾기 (예: 예산, 민원)" value="' + esc(state.word) + '" aria-label="내용에서 찾기"></div>';
+
+    var pass = function (r, text) {
+      return (!state.year || String(r.m.year) === state.year) && (!state.member || r.t.m === state.member) &&
+        (!state.word || text.indexOf(state.word) >= 0);
+    };
+    var body = "", shown = 0, total = 0, lastYear = "";
+    var yearHead = function (r) {
+      if (r.m.year === lastYear) return "";
+      lastYear = r.m.year;
+      return '<div class="year">' + r.m.year + "년 행정사무감사</div>";
+    };
+    if (state.tab === "all") {
+      var rows = all.filter(function (r) { return pass(r, r.t.b.map(function (b) { return b[2]; }).join("\n")); });
+      total = rows.length;
+      rows.slice(0, state.limit).forEach(function (r) { body += yearHead(r) + threadHtml(r, false); shown++; });
+    } else {
+      var items = (state.tab === "promise" ? promises : requests).filter(function (x) { return pass(x.r, x.s); });
+      total = items.length;
+      items.slice(0, state.limit).forEach(function (x, i) {
+        var r = x.r, isP = state.tab === "promise";
+        var speaker = "", asked = "";
+        for (var k = 0; k < r.t.b.length; k++) {
+          if (r.t.b[k][3] === x.idx) { speaker = r.t.b[k][1]; break; }
+          if (r.t.b[k][0] === "m") asked = r.t.b[k][2];
+        }
+        asked = asked.replace(/\n/g, " ");
+        if (asked.length > 170) asked = "…" + asked.slice(-170);
+        var link = isP ? phraseLink(r.m, x.s) : memberLink(r.m, r.t, x.idx);
+        body += yearHead(r) + '<div class="item ' + (isP ? "promise" : "request") + '">' + (isP && asked ? '<div class="asked"><b>질의</b> ' + esc(asked) + "</div>" : "") +
+          '<div class="quote">' + (isP ? "<b>답변</b> " : "") + hl(x.s, state.word) + "</div>" +
+          '<div class="meta"><span>' + esc(speaker) + (isP ? " → " + asker(r.t) : "") + "</span><span>" + esc(where(r.m)) + "</span>" +
+          '<button type="button" data-ctx="' + i + '">앞뒤 문답 보기</button>' +
+          '<a href="' + esc(link) + '" target="_blank" rel="noopener">원문</a></div><div data-slot="' + i + '"></div></div>';
+        shown++;
+      });
+      render.items = items;
+    }
+    if (!total) body = '<p class="empty">조건에 맞는 내용이 없습니다.</p>';
+    h += '<p class="count">' + total + "건 중 " + shown + "건 표시</p>" + body;
+    if (shown < total) h += '<button class="more" type="button" id="more">더 보기</button>';
+    out.innerHTML = h;
+  }
+
+  out.addEventListener("click", function (e) {
+    var el = e.target.closest("button");
+    if (!el) return;
+    if (el.id === "print") {
+      state.limit = 100000; render();
+      Array.prototype.forEach.call(out.querySelectorAll("details"), function (d) { d.open = true; });
+      window.print(); return;
+    }
+    if (el.id === "more") { state.limit += 50; render(); return; }
+    if (el.hasAttribute("data-tab")) { state.tab = el.getAttribute("data-tab"); state.limit = 30; render(); return; }
+    if (el.hasAttribute("data-member")) {
+      state.member = el.getAttribute("data-member"); state.tab = "all"; state.limit = 30; render();
+      out.querySelector(".tabs").scrollIntoView({ behavior: "smooth" }); return;
+    }
+    if (el.hasAttribute("data-ctx")) {
+      var i = el.getAttribute("data-ctx"), slot = out.querySelector('[data-slot="' + i + '"]');
+      if (slot.innerHTML) { slot.innerHTML = ""; el.textContent = "앞뒤 문답 보기"; }
+      else { slot.innerHTML = threadHtml(render.items[i].r, true); el.textContent = "앞뒤 문답 닫기"; }
+    }
+  });
+  out.addEventListener("change", function (e) {
+    if (e.target.id === "fyear") { state.year = e.target.value; state.limit = 30; render(); }
+    if (e.target.id === "fmember") { state.member = e.target.value; state.limit = 30; render(); }
+  });
+  var timer;
+  out.addEventListener("input", function (e) {
+    if (e.target.id !== "fword") return;
+    clearTimeout(timer);
+    var v = e.target.value;
+    timer = setTimeout(function () {
+      state.word = v.trim(); state.limit = 30; render();
+      var box = $("fword"); box.focus(); box.setSelectionRange(box.value.length, box.value.length);
+    }, 350);
+  });
+
+  renderChips();
+})();
+</script>
+</body>
+</html>
