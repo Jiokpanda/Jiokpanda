@@ -276,13 +276,22 @@ def findings_of(report, folder):
     return out
 
 
+NOT_DEPT = re.compile(r"현지|휴회|강평|추가행정|현황|시간계획|별도")
+
+
 def plan_keys(cell):
-    """감사 일정 칸(○ 국 ⦁과 ⦁과 …)에서 부서 열쇠를 뽑는다."""
-    text = re.sub(r"및\s*읍[·ㆍ‧․]면[·ㆍ‧․]동|및\s*읍[·ㆍ‧․]면|및\s*동(?![가-힣])", "", cell)
+    """감사 일정 칸(○ 국 ⦁과 ⦁과 …)에서 부서 열쇠를 뽑는다.
+
+    위원회마다 표기가 달라 기관은 ○·◌·【 】, 소속 과는 ⦁·․·- 로 적혀 있다.
+    """
+    text = cell.replace("″", "").replace("(재)", "")
+    text = re.sub(r"및\s*읍[·ㆍ‧․]면[·ㆍ‧․]동|및\s*읍[·ㆍ‧․]면|및\s*동(?![가-힣])", "", text)
+    text = re.sub(r"【\s*(.*?)\s*】", r"○\1\n", text)
+    text = re.sub(r"\(([^()]*과)\)", r"⦁\1", text)      # 미래도시기획국 (미래도시과)
     keys = []
-    for unit in re.split(r"[○◦◯]", text):
-        parts = [re.sub(r"\(.*?\)|\s", "", x) for x in re.split(r"[⦁•∙▪\-]|\n(?=\s*[가-힣(])", unit)]
-        parts = [x for x in parts if len(x) >= 2]
+    for unit in re.split(r"[○◌◦◯]", text):
+        parts = [re.sub(r"\(.*?\)|\s", "", x) for x in re.split(r"[⦁•∙▪․\-\n]", unit)]
+        parts = [x for x in parts if len(x) >= 2 and not NOT_DEPT.search(x)]
         if not parts:
             continue
         parent = parts[0]
@@ -298,19 +307,20 @@ def plan_of(report, folder, name_to_code):
     committee = next((c for c in COMMITTEE_NAMES if c in report["file"]), "")
     out = {"name": committee, "year": report["year"], "viewer": report["viewer"], "post": report["post"],
            "members": [], "days": []}
+    done = False
     for n in range(1, int((folder / "done").read_text()) + 1):
         doc = (folder / f"{n}.html").read_text(encoding="utf-8")
         flat = re.sub(r"\s", "", clean(re.sub(r"(?is)<table\b.*?</table>", "", doc)))
-        if "감사반편성" in flat and not out["members"]:
-            for role, rx in (("위원장", r"○위원장:([가-힣]{2,4})"), ("간사", r"○간사:([가-힣]{2,4})"),
-                             ("위원", r"○위원:([가-힣,]+)")):
+        if "감사반" in flat and "편성" in flat and not out["members"]:
+            for role, rx in (("위원장", r"[○\-]위원장:([가-힣]{2,4})"), ("간사", r"[○\-]간사:([가-힣]{2,4})"),
+                             ("위원", r"[○\-]위원:([가-힣,]+)")):
                 found = re.search(rx, flat)
                 for name in (found.group(1).split(",") if found else []):
                     if name:
                         out["members"].append({"name": name, "role": role, "code": name_to_code.get(name, "")})
         for grid in grid_tables(doc):
             head = [re.sub(r"\s", "", h) for h in grid[0]] if grid else []
-            if out["days"] or len(head) < 3 or "일자" not in head[0] or "위원회" not in head[1]:
+            if done or len(head) < 3 or "일자" not in head[0] or "위원회" not in head[1]:
                 continue
             for row in grid[1:]:
                 day = re.search(r"제\s*\d+\s*일차", row[0])
@@ -318,8 +328,16 @@ def plan_of(report, folder, name_to_code):
                 target = "\n".join(dict.fromkeys(c for c in row[1:-1] if c.strip() and "회의실" not in re.sub(r"\s", "", c)))
                 if not when or not target:
                     continue
-                out["days"].append({"day": re.sub(r"\s", "", day.group(0)) if day else "", "date": when.group(0),
-                                    "text": re.sub(r"[ \t]+", " ", target), "keys": plan_keys(target)})
+                if out["days"] and out["days"][-1]["date"] == when.group(0):
+                    out["days"][-1]["text"] += "\n" + target   # 같은 날이 여러 줄로 나뉜 표
+                else:
+                    out["days"].append({"day": re.sub(r"\s", "", day.group(0)) if day else "",
+                                        "date": when.group(0), "text": target})
+            done = bool(out["days"])
+    for d in out["days"]:
+        d["keys"] = plan_keys(d["text"])
+        d["text"] = re.sub(r"[ \t]+", " ", d["text"].replace("″", "")).strip()
+    out["days"] = [d for d in out["days"] if d["keys"]]
     return out
 
 

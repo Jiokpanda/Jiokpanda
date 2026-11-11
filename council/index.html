@@ -151,7 +151,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
   <footer>
     <strong>자료 출처와 유의사항</strong>
     <ul>
-      <li>출처: <a href="https://council.yongin.go.kr/kr/minutes/search.do" target="_blank" rel="noopener">용인특례시의회 회의록</a> 중 행정사무감사 회의록. <span id="gen"></span></li>
+      <li>출처: <a href="https://council.yongin.go.kr/kr/minutes/search.do" target="_blank" rel="noopener">용인특례시의회 회의록</a>(행정사무감사 회의록과 올해 일반 회의록), 의안검색, 행정사무감사 계획서. <span id="gen"></span></li>
       <li>부서는 답변자의 직함(예: “행정과장”)으로 구분합니다. 조직 개편으로 이름이 바뀐 부서는 옛 이름도 함께 골라 주세요.</li>
       <li>‘약속 답변’, ‘자료 요구’, ‘단골 질문’, ‘막혔던 질문’은 문장 표현을 기준으로 자동으로 골라낸 것이라 빠지거나 잘못 잡힌 것이 있을 수 있습니다. 중요한 내용은 ‘원문’에서 확인하세요.</li>
       <li>‘결과보고서 지적사항’은 <a href="https://council.yongin.go.kr/kr/inspectionBBS.do" target="_blank" rel="noopener">의회 행정사무감사 게시판</a>에 올라온 연도별 결과보고서의 처리의견 표에서 가져왔습니다. 보고서의 부서 표기가 회의록과 다르면 연결되지 않을 수 있습니다.</li>
@@ -178,7 +178,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
   IDX.meetings.forEach(function (m) { meetingByUid[m.uid] = m; });
   var years = IDX.meetings.map(function (m) { return m.year; });
   $("gen").textContent = Math.min.apply(null, years) + "~" + Math.max.apply(null, years) + "년 회의록 " +
-    IDX.meetings.length + "건, " + IDX.generated + " 기준.";
+    IDX.meetings.length + "건(행감 " + IDX.meetings.filter(function (m) { return m.audit !== false; }).length + "건 포함), " + IDX.generated + " 기준.";
 
   var selected = {};          // 고른 부서명
   var loaded = {};            // 회의록 uid → 자료
@@ -495,7 +495,14 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       plain = true;
       var hits = [];   // 고른 부서가 들어 있는 감사 일정
       MEMBERS.plans.forEach(function (pl, pi) {
-        pl.days.forEach(function (d) { if (d.keys.some(function (k) { return keys[k]; })) hits.push({ pl: pl, pi: pi, d: d }); });
+        pl.days.forEach(function (d) {
+          // 일정표의 기관명과 같거나, 그 기관의 하위 조직(예: 용인도시공사 → 용인도시공사경영기획본부)이면 연결한다.
+          var match = d.keys.some(function (k) {
+            return keys[k] || (k.length >= 5 && !/^(처인|기흥|수지)구$/.test(k) &&
+              Object.keys(keys).some(function (sk) { return sk.indexOf(k) === 0; }));
+          });
+          if (match) hits.push({ pl: pl, pi: pi, d: d });
+        });
       });
       var pi = state.committee !== undefined && MEMBERS.plans[state.committee] ? Number(state.committee) : (hits.length ? hits[0].pi : 0);
       var plan = MEMBERS.plans[pi];
