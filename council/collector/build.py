@@ -137,6 +137,133 @@ def threads_of(blocks):
     return out
 
 
+# ---------- 결과보고서(지적사항) ----------
+
+COMMITTEE_NAMES = ["의회운영위원회", "자치행정위원회", "문화복지위원회", "경제환경위원회", "도시건설위원회"]
+KINDS = ("시정", "처리", "건의")
+
+
+def grid_tables(doc):
+    """HTML 표를 병합 칸(rowspan/colspan)을 풀어 2차원 목록으로 읽는다."""
+    out = []
+    for table in re.findall(r"(?is)<table\b.*?</table>", doc):
+        grid, pending = [], {}
+        for r, tr in enumerate(re.findall(r"(?is)<tr\b.*?</tr>", table)):
+            cells = re.findall(r"(?is)<td\b([^>]*)>(.*?)</td>", tr)
+            row, c, i = [], 0, 0
+            while i < len(cells) or (r, c) in pending:
+                if (r, c) in pending:
+                    row.append(pending.pop((r, c)))
+                    c += 1
+                    continue
+                attrs, inner = cells[i]
+                i += 1
+                cs = re.search(r'colspan="?(\d+)', attrs)
+                rs = re.search(r'rowspan="?(\d+)', attrs)
+                text = clean(inner)
+                for _ in range(int(cs.group(1)) if cs else 1):
+                    row.append(text)
+                    for rr in range(1, int(rs.group(1)) if rs else 1):
+                        pending[(r + rr, c)] = text
+                    c += 1
+            grid.append(row)
+        out.append(grid)
+    return out
+
+
+def dept_key(name):
+    """회의록과 보고서의 부서 표기를 맞춰 보기 위한 열쇠. 화면(index.html)과 같은 규칙."""
+    return re.sub(r"\(.*?\)|\s", "", name).replace("구청", "구")
+
+
+def report_depts(cell):
+    """보고서의 담당부서 칸을 부서 열쇠 목록으로 바꾼다."""
+    t = re.sub(r"\([^)]*\)?", "", cell)          # (16건), (의정팀) 같은 덧붙임 제거
+    t = re.sub(r"\s", "", t)
+    t = re.sub(r"보건소(?=.)", "", t)             # 처인구보건소보건정책과 → 처인구보건정책과
+    m = re.match(r"(.*?)(\d),(\d)과$", t)        # 처인구도시건축1,2과
+    parts = [m.group(1) + m.group(2) + "과", m.group(1) + m.group(3) + "과"] if m else \
+        [x for x in re.split(r"[,·ㆍ/]", t) if x]
+    every = re.match(r"(각구청?|3개구청?)(.+)", parts[0]) if parts else None
+    keys = []
+    for i, part in enumerate(parts):
+        if every:
+            rest = every.group(2) if i == 0 else part
+            keys += [gu + rest for gu in ("처인구", "기흥구", "수지구")]
+        else:
+            keys.append(part.replace("구청", "구"))
+    return keys
+
+
+def findings_of(report, folder):
+    """결과보고서 한 파일에서 지적사항 표를 찾아 읽는다."""
+    out = []
+    named = [c for c in COMMITTEE_NAMES if c in report["file"]]
+    committee = named[0] if named else ""
+    pages = int((folder / "done").read_text())
+    dept = ""  # 표가 쪽을 넘어가면 부서 칸이 비어 있으므로 앞의 부서를 이어 쓴다
+    for n in range(1, pages + 1):
+        doc = (folder / f"{n}.html").read_text(encoding="utf-8")
+        if not named:  # 통합본: 표 밖 글에 마지막으로 나온 위원회 이름을 따른다
+            outside = re.sub(r"\s", "", clean(re.sub(r"(?is)<table\b.*?</table>", "", doc)))
+            seen = [(outside.rfind(c), c) for c in COMMITTEE_NAMES if c in outside]
+            if seen:
+                committee = max(seen)[1]
+        for grid in grid_tables(doc):
+            if len(grid) < 2 or "지적" not in "".join(grid[0]):
+                continue
+            head = [re.sub(r"\s", "", h) for h in grid[0]]
+            sub = [re.sub(r"\s", "", h) for h in grid[1]]
+            try:
+                c_dept = next(i for i, h in enumerate(head) if "부서" in h or "기관" in h)
+                c_text = next(i for i, h in enumerate(head) if "지적" in h)
+            except StopIteration:
+                continue
+            kind_cols = {k: sub.index(k) for k in KINDS if k in sub}
+            c_kind = next((i for i, h in enumerate(head) if "비고" in h or "처리의견" in h), None)
+            for row in grid[1:]:
+                if len(row) <= max(c_dept, c_text) or re.sub(r"\s", "", row[c_text]) in ("", head[c_text], sub[c_text]):
+                    continue
+                if row[c_dept].strip():
+                    dept = row[c_dept]
+                kind = ""
+                if kind_cols:
+                    kind = next((k for k, i in kind_cols.items() if i < len(row) and row[i].strip()), "")
+                elif c_kind is not None and c_kind < len(row):
+                    kind = next((k for k in KINDS if k in row[c_kind]), "")
+                text = re.sub(r"\s*\n\s*", " ", row[c_text]).strip()
+                if out and out[-1]["t"] == text and out[-1]["raw_cell"] == dept:
+                    continue  # 병합된 칸 때문에 같은 지적사항이 줄마다 반복되는 경우
+                out.append({
+                    "raw_cell": dept, "y": report["year"], "c": committee,
+                    "raw": re.sub(r"\s+", " ", re.sub(r"\(\d+건\)", "", dept)).strip(),
+                    "d": report_depts(dept), "k": kind,
+                    "t": text,
+                    "v": report["viewer"], "p": report["post"],
+                })
+    for f in out:
+        del f["raw_cell"]
+    return out
+
+
+def build_findings(depts):
+    path = CACHE / "reports.json"
+    findings = []
+    if path.exists():
+        for report in json.loads(path.read_text(encoding="utf-8")):
+            folder = CACHE / "reports" / str(report["viewer"])
+            if (folder / "done").exists():
+                findings += findings_of(report, folder)
+    findings.sort(key=lambda f: -f["y"])
+    (DATA / "findings.js").write_text(
+        "window.COUNCIL_FINDINGS=" + json.dumps(findings, ensure_ascii=False, separators=(",", ":")) + ";\n",
+        encoding="utf-8")
+    known = {dept_key(d) for d in depts}
+    matched = sum(1 for f in findings if known.intersection(f["d"]))
+    print(f"결과보고서 지적사항 {len(findings)}건 (회의록 부서와 이름이 맞는 것 {matched}건)")
+    return findings
+
+
 def main():
     meta = json.loads((CACHE / "meetings.json").read_text(encoding="utf-8"))
     (DATA / "m").mkdir(parents=True, exist_ok=True)
@@ -176,6 +303,7 @@ def main():
     (DATA / "index.js").write_text(
         "window.COUNCIL_INDEX=" + json.dumps(index, ensure_ascii=False, separators=(",", ":")) + ";\n",
         encoding="utf-8")
+    build_findings(depts)
     size = sum(p.stat().st_size for p in DATA.rglob("*.js")) / 1e6
     print(f"회의록 {len(meetings)}건, 부서명 {len(depts)}개, 자료 크기 {size:.1f}MB")
 

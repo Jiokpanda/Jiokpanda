@@ -82,6 +82,8 @@ td button.name { background: none; border: 0; padding: 0; color: var(--accent); 
 .item .meta button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; }
 .item.promise { border-left: 4px solid var(--accent); }
 .item.request { border-left: 4px solid var(--warn); }
+.kind { display: inline-block; font-size: 12px; font-weight: 700; padding: 0 8px; border-radius: 4px; margin-right: 8px; background: var(--accent-soft); color: var(--accent); vertical-align: 2px; }
+.kind.k-시정 { background: var(--warn-soft); color: var(--warn); }
 details.thread > summary { list-style: none; cursor: pointer; padding: 12px 14px; }
 details.thread > summary::-webkit-details-marker { display: none; }
 details.thread > summary .who { font-weight: 700; }
@@ -130,12 +132,13 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       <li>출처: <a href="https://council.yongin.go.kr/kr/minutes/search.do" target="_blank" rel="noopener">용인특례시의회 회의록</a> 중 행정사무감사 회의록. <span id="gen"></span></li>
       <li>부서는 답변자의 직함(예: “행정과장”)으로 구분합니다. 조직 개편으로 이름이 바뀐 부서는 옛 이름도 함께 골라 주세요.</li>
       <li>‘약속·검토 답변’과 ‘자료 요구’는 문장 표현을 기준으로 자동으로 골라낸 것이라 빠지거나 잘못 잡힌 것이 있을 수 있습니다. 중요한 내용은 ‘원문’에서 확인하세요.</li>
-      <li>연도별 감사 계획서와 결과보고서는 <a href="https://council.yongin.go.kr/kr/inspectionBBS.do" target="_blank" rel="noopener">의회 행정사무감사 게시판</a>에 있습니다.</li>
+      <li>‘결과보고서 지적사항’은 <a href="https://council.yongin.go.kr/kr/inspectionBBS.do" target="_blank" rel="noopener">의회 행정사무감사 게시판</a>에 올라온 연도별 결과보고서의 처리의견 표에서 가져왔습니다. 보고서의 부서 표기가 회의록과 다르면 연결되지 않을 수 있습니다.</li>
     </ul>
   </footer>
 </div>
 
 <script src="data/index.js"></script>
+<script src="data/findings.js"></script>
 <script>
 (function () {
   "use strict";
@@ -155,7 +158,10 @@ footer ul { padding-left: 18px; margin: 6px 0; }
 
   var selected = {};          // 고른 부서명
   var loaded = {};            // 회의록 uid → 자료
-  var state = { tab: "promise", year: "", member: "", word: "", limit: 30 };
+  var FINDINGS = window.COUNCIL_FINDINGS || [];
+  var state = { tab: FINDINGS.length ? "finding" : "promise", year: "", member: "", kind: "", word: "", limit: 30 };
+  // 회의록과 결과보고서의 부서 표기를 맞추는 열쇠(collector/build.py의 dept_key와 같은 규칙)
+  function deptKey(name) { return name.replace(/\(.*?\)|\s/g, "").replace(/구청/g, "구"); }
 
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
@@ -291,6 +297,12 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       s.total++; s.y[r.m.year] = (s.y[r.m.year] || 0) + 1;
     });
     var ys = Object.keys(yearSet).sort().reverse();
+    var keys = {};
+    depts.forEach(function (d) { keys[deptKey(d)] = true; });
+    var findings = FINDINGS.filter(function (f) { return f.d.some(function (k) { return keys[k]; }); });
+    var kindCount = { "시정": 0, "처리": 0, "건의": 0 };
+    findings.forEach(function (f) { if (f.k in kindCount) kindCount[f.k]++; yearSet[f.y] = yearSet[f.y] || 0; });
+    ys = Object.keys(yearSet).sort().reverse();
     var promises = [], requests = [];
     talks.forEach(function (r) {
       r.t.p.forEach(function (p) { if (selected[p[0]]) promises.push({ r: r, dept: p[0], s: p[1], idx: p[2] }); });
@@ -299,6 +311,8 @@ footer ul { padding-left: 18px; margin: 6px 0; }
 
     var h = '<div class="titlebar"><h2>' + esc(depts.join(", ")) + '</h2><button class="printbtn" type="button" id="print">인쇄</button></div>';
     h += '<div class="stats">' +
+      (FINDINGS.length ? '<div class="stat"><b>' + findings.length + "</b><span>결과보고서 지적사항 (시정 " + kindCount["시정"] +
+        " · 처리 " + kindCount["처리"] + " · 건의 " + kindCount["건의"] + ")</span></div>" : "") +
       '<div class="stat"><b>' + qa.length + "</b><span>의원 질의 묶음" + (ys.length ? " (" + (ys.length > 1 ? ys[ys.length - 1] + "~" : "") + ys[0] + "년)" : "") + "</span></div>" +
       '<div class="stat"><b>' + Object.keys(memberStat).length + "</b><span>질의한 의원</span></div>" +
       '<div class="stat"><b>' + promises.length + "</b><span>약속·검토 답변</span></div>" +
@@ -319,15 +333,18 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       h += "</tbody></table></div>";
     }
 
-    var tabs = [["promise", "약속·검토 답변 " + promises.length], ["request", "자료 요구 " + requests.length], ["all", "질의·답변 전문 " + all.length]];
+    var tabs = (FINDINGS.length ? [["finding", "결과보고서 지적사항 " + findings.length]] : []).concat([["promise", "약속·검토 답변 " + promises.length], ["request", "자료 요구 " + requests.length], ["all", "질의·답변 전문 " + all.length]]);
     h += '<div class="tabs" role="tablist">' + tabs.map(function (t) {
       return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (state.tab === t[0]) + '">' + t[1] + "</button>";
     }).join("") + "</div>";
 
     h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
       ys.map(function (y) { return '<option value="' + y + '"' + (state.year === y ? " selected" : "") + ">" + y + "년</option>"; }).join("") + "</select>" +
-      '<select id="fmember" aria-label="의원"><option value="">전체 의원</option>' +
-      members.map(function (x) { return '<option value="' + x.code + '"' + (state.member === x.code ? " selected" : "") + ">" + esc(x.s.name) + "</option>"; }).join("") + "</select>" +
+      (state.tab === "finding"
+        ? '<select id="fkind" aria-label="조치 구분"><option value="">전체 구분</option>' +
+          ["시정", "처리", "건의"].map(function (k) { return '<option value="' + k + '"' + (state.kind === k ? " selected" : "") + ">" + k + "</option>"; }).join("") + "</select>"
+        : '<select id="fmember" aria-label="의원"><option value="">전체 의원</option>' +
+          members.map(function (x) { return '<option value="' + x.code + '"' + (state.member === x.code ? " selected" : "") + ">" + esc(x.s.name) + "</option>"; }).join("") + "</select>") +
       '<input id="fword" type="search" placeholder="내용에서 찾기 (예: 예산, 민원)" value="' + esc(state.word) + '" aria-label="내용에서 찾기"></div>';
 
     var pass = function (r, text) {
@@ -340,7 +357,22 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       lastYear = r.m.year;
       return '<div class="year">' + r.m.year + "년 행정사무감사</div>";
     };
-    if (state.tab === "all") {
+    if (state.tab === "finding") {
+      var fs = findings.filter(function (f) {
+        return (!state.year || String(f.y) === state.year) && (!state.kind || f.k === state.kind) &&
+          (!state.word || f.t.indexOf(state.word) >= 0);
+      });
+      total = fs.length;
+      var fy = "";
+      fs.slice(0, state.limit).forEach(function (f) {
+        if (f.y !== fy) { fy = f.y; body += '<div class="year">' + f.y + "년 행정사무감사 결과보고서</div>"; }
+        body += '<div class="item finding"><div class="quote">' + (f.k ? '<span class="kind k-' + esc(f.k) + '">' + esc(f.k) + "</span>" : "") + hl(f.t, state.word) + "</div>" +
+          '<div class="meta"><span>' + esc(f.raw) + "</span><span>" + esc(f.c) + "</span>" +
+          '<a href="' + SITE + "/common/synap/bbsViewer.do?uid=" + f.v + '" target="_blank" rel="noopener">보고서 보기</a>' +
+          '<a href="' + SITE + "/kr/inspectionBBSview.do?uid=" + f.p + '" target="_blank" rel="noopener">게시글</a></div></div>';
+        shown++;
+      });
+    } else if (state.tab === "all") {
       var rows = all.filter(function (r) { return pass(r, r.t.b.map(function (b) { return b[2]; }).join("\n")); });
       total = rows.length;
       rows.slice(0, state.limit).forEach(function (r) { body += yearHead(r) + threadHtml(r, false); shown++; });
@@ -367,6 +399,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       render.items = items;
     }
     if (!total) body = '<p class="empty">조건에 맞는 내용이 없습니다.</p>';
+    if (state.tab === "finding") body = '<p class="hint">의회가 감사 뒤 채택한 결과보고서의 지적사항입니다. 시정·처리·건의는 의회가 요구한 조치 구분입니다.</p>' + body;
     h += '<p class="count">' + total + "건 중 " + shown + "건 표시</p>" + body;
     if (shown < total) h += '<button class="more" type="button" id="more">더 보기</button>';
     out.innerHTML = h;
@@ -394,6 +427,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
   });
   out.addEventListener("change", function (e) {
     if (e.target.id === "fyear") { state.year = e.target.value; state.limit = 30; render(); }
+    if (e.target.id === "fkind") { state.kind = e.target.value; state.limit = 30; render(); }
     if (e.target.id === "fmember") { state.member = e.target.value; state.limit = 30; render(); }
   });
   var timer;

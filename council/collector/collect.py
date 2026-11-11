@@ -49,8 +49,16 @@ def _connect():
     return conn
 
 
-def fetch(url, tries=12):
-    """연결 단계에서 자주 끊기므로, 한 번 맺은 연결을 계속 쓰고 끊기면 다시 맺는다."""
+class NotFound(Exception):
+    pass
+
+
+def fetch(url, tries=12, want_url=False):
+    """연결 단계에서 자주 끊기므로, 한 번 맺은 연결을 계속 쓰고 끊기면 다시 맺는다.
+
+    want_url=True이면 (본문, 최종 주소)를 돌려준다. 문서 뷰어처럼 다른 주소로
+    넘겨 주는 경우 최종 주소가 필요하다.
+    """
     global _conn
     path = url[len(BASE):]
     last = None
@@ -61,10 +69,18 @@ def fetch(url, tries=12):
             _conn.request("GET", path, headers={"User-Agent": "Mozilla/5.0", "Connection": "keep-alive"})
             res = _conn.getresponse()
             data = res.read()
+            if res.status in (301, 302, 303) and res.getheader("Location"):
+                path = urllib.parse.urljoin(BASE + path, res.getheader("Location"))[len(BASE):]
+                continue
+            if res.status == 404:
+                raise NotFound(url)
             if res.status != 200:
                 raise OSError(f"HTTP {res.status}")
             time.sleep(DELAY)
-            return data.decode("utf-8", "replace")
+            text = data.decode("utf-8", "replace")
+            return (text, BASE + path) if want_url else text
+        except NotFound:
+            raise
         except (http.client.HTTPException, OSError) as e:
             last = e
             try:
@@ -118,11 +134,63 @@ def list_meetings(term, code):
         page += 1
 
 
+def collect_reports(years):
+    """행정사무감사 게시판에서 결과보고서를 찾아, 문서 뷰어가 변환한 HTML을 받는다."""
+    out_dir = CACHE / "reports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    posts, page = [], 1
+    while True:
+        doc = fetch(f"{BASE}/kr/inspectionBBS.do?page={page}")
+        found = re.findall(r'href="(/kr/inspectionBBSview\.do\?uid=([0-9A-F]+)[^"]*)"[^>]*>\s*([^<]+?)\s*</a>', doc)
+        if not found:
+            break
+        posts += [(uid, strip(title)) for _, uid, title in found]
+        total = re.search(r"전체게시물\s*:\s*(\d+)", strip(doc))
+        if not total or len(posts) >= int(total.group(1)):
+            break
+        page += 1
+
+    reports = []
+    for uid, title in posts:
+        year = re.search(r"(20\d\d)년도", title)
+        if "결과보고서" not in title or not year or int(year.group(1)) not in years:
+            continue
+        view = fetch(f"{BASE}/kr/inspectionBBSview.do?uid={uid}")
+        # 첨부파일 이름 바로 뒤에 '바로보기' 뷰어 링크가 붙어 있다.
+        files = re.findall(r"download\.do\?bbs_id=inspection&(?:amp;)?uid=[0-9A-F]+' title='([^']+)'.*?"
+                           r"bbsViewer\.do\?uid=(\d+)", view, re.S)
+        print(f"{title}: 첨부 {len(files)}개", flush=True)
+        for name, vid in files:
+            name = html.unescape(name)
+            folder = out_dir / vid
+            info = {"year": int(year.group(1)), "post": uid, "title": title, "file": name, "viewer": int(vid)}
+            reports.append(info)
+            if (folder / "done").exists():
+                continue
+            folder.mkdir(exist_ok=True)
+            try:
+                _, final = fetch(f"{BASE}/common/synap/bbsViewer.do?uid={vid}", want_url=True)
+                q = urllib.parse.parse_qs(urllib.parse.urlsplit(final).query)
+                base = BASE + q["rs"][0] + q["fn"][0]
+                index = fetch(base + ".xml")
+                pages = int(re.search(r"<filespage_cnt>(\d+)<", index).group(1))
+                for n in range(1, pages + 1):
+                    (folder / f"{n}.html").write_text(fetch(f"{base}.files/{n}.html"), encoding="utf-8")
+                (folder / "done").write_text(str(pages))
+            except (NotFound, KeyError, AttributeError) as e:
+                print(f"  변환본을 받지 못함: {name} ({e})", flush=True)
+    (CACHE / "reports.json").write_text(json.dumps(reports, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"결과보고서 파일 {len(reports)}개")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--terms", default="9,10", help="수집할 대수(쉼표로 구분)")
+    ap.add_argument("--reports-only", action="store_true", help="결과보고서만 받기")
     args = ap.parse_args()
     (CACHE / "minutes").mkdir(parents=True, exist_ok=True)
+    if args.reports_only:
+        return collect_reports(range(2022, 2100))
 
     meetings = {}
     for term in [t.strip() for t in args.terms.split(",") if t.strip()]:
@@ -155,6 +223,7 @@ def main():
                     "current_members": members}, ensure_ascii=False, indent=1),
         encoding="utf-8")
     print(f"완료: 회의록 {done}건, 현역 의원 {len(members)}명")
+    collect_reports({int(m["date"][:4]) for m in meetings.values()} or range(2022, 2100))
 
 
 if __name__ == "__main__":
