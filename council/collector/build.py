@@ -22,14 +22,15 @@ DATA = ROOT / "data"
 BARE_TITLES = {"사장", "이사장", "대표이사", "원장", "센터장", "관장", "소장", "본부장",
                "단장", "국장", "처장", "실장", "팀장", "부장", "과장", "대표", "회장",
                "사무국장", "사무처장", "상임이사", "총장", "교장"}
+HEAD_TITLES = ("대표이사", "상임이사", "이사장", "사장", "회장")
 # 끝의 '장'을 떼면 부서명이 되는 직함. 예) 행정과장 → 행정과
 UNIT_SUFFIX = re.compile(r"(과|국|실|소|팀|단|본부|원|관|센터|구청|청|동|읍|면|처|부|담당|도서관|박물관|사업소)장$")
 
 # 답변에서 '하겠다'고 한 문장을 찾는다. 인사·보고 같은 의례적 표현은 뺀다.
 PROMISE = re.compile(
     r"(검토|조치|시정|보완|개선|제출|확인|반영|마련|추진|정비|점검|협의|노력|챙기|챙겨|살펴|강구|수정|바로잡|신경|"
-    r"개정|변경|조정|파악|조사|분석|준비|수립|강화|확대|홍보|관리)[^.\n]{0,22}겠습니다")
-REQUEST = re.compile(r"자료[^.\n]{0,40}(제출|주시|주십|주세요|주셨|부탁|요청|요구|보내|갖다|가져다|받아)")
+    r"개정|변경|조정|파악|조사|분석|준비|수립|강화|확대|홍보|관리)[^.\n]{0,22}(?<![되있없같알])겠습니다")
+REQUEST = re.compile(r"자료[^.\n]{0,40}(제출|주시|주십|주세요|부탁|요청|요구|보내|갖다|가져다)")
 
 
 def clean(fragment):
@@ -51,6 +52,12 @@ def dept_of(title):
     last = words[-1]
     if UNIT_SUFFIX.search(last):
         words[-1] = last[:-1]
+    else:
+        # 기관명에 직함이 붙어 있는 경우. 예) 용인도시공사사장 → 용인도시공사
+        for tail in HEAD_TITLES:
+            if last.endswith(tail) and len(last) > len(tail) + 2:
+                words[-1] = last[:-len(tail)]
+                break
     return " ".join(words)
 
 
@@ -151,7 +158,7 @@ def main():
         for t in threads:
             for d in t["d"]:
                 e = depts[d]
-                if t["k"] != "report":
+                if t["k"] == "qa":
                     e["n"] += 1
                     e["years"][year] += 1
                 if m["uid"] not in e["uids"]:
