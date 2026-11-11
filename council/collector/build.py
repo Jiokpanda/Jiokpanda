@@ -33,6 +33,32 @@ PROMISE = re.compile(
 REQUEST = re.compile(r"자료[^.\n]{0,40}(제출|주시|주십|주세요|부탁|요청|요구|보내|갖다|가져다)")
 
 
+# 즉답하지 못하고 확인·별도 보고로 넘긴 답변
+STUCK = re.compile(
+    r"확인해 ?보(고|겠|도록)|확인 ?후에?|파악해 ?보|파악(을|이|은)? ?(못|안)|자료를? ?(안|못) ?가지고|"
+    r"정확(한|히)[^.\n]{0,15}(모르|기억)|(따로|별도로?|추후에?|서면으로) ?(보고|제출|말씀|설명)")
+
+# 어느 부서에나 나오는 단골 질의 주제: (이름, 질의에서 찾을 표현, 미리 준비할 것)
+TOPICS = [
+    ("예산 집행·이월·불용", r"집행률|집행 ?잔액|불용|이월", "사업별 집행률, 불용·이월액과 사유, 연말 집행 전망"),
+    ("수의계약·관내 업체", r"수의계약|관내 ?업체|쪼개기|분할 ?발주", "수의계약 건수·금액, 관내 업체 비율, 같은 업체와의 반복 계약 여부"),
+    ("용역", r"용역", "용역 목록과 금액, 결과물 활용 실적, 비슷한 용역의 중복 여부"),
+    ("위원회 운영", r"위원회[^.\n]{0,25}(개최|운영|미개최|위촉|구성|서면|심의)", "소관 위원회별 개최 횟수, 서면 심의 비율, 위촉 현황(성별·중복 위촉)"),
+    ("민원", r"민원", "민원 건수와 유형, 처리 기간, 반복·집단 민원의 진행 상황"),
+    ("홍보", r"홍보", "홍보 수단별 실적과 예산, 이용률·인지도 등 효과"),
+    ("보조금·민간위탁", r"보조금|위탁|수탁", "보조금 정산·점검 실적, 수탁기관 선정 절차, 성과평가 결과"),
+    ("인력·채용", r"기간제|공무직|채용|결원|정원|인력", "정원과 현원, 결원 사유, 기간제·공무직 채용 절차 준수 여부"),
+    ("성과·실적·만족도", r"성과|실적|만족도|이용률", "성과지표 달성률, 이용 실적 추이, 만족도 조사 결과"),
+    ("감사 지적 후속 조치", r"종합감사|감사 ?지적|지적 ?사항|기관경고|환수", "상급기관·자체 감사 지적사항과 조치 결과, 재발 방지 대책"),
+    ("안전", r"안전", "시설 점검 결과, 사고 현황, 보완 계획"),
+    ("조례·규정", r"조례|규칙|규정|지침", "소관 조례 정비 계획, 조례에 정한 계획·위원회의 이행 여부"),
+    ("공모사업·국도비", r"공모|국비|도비|국도비", "공모 신청·선정 실적, 국도비 확보액, 매칭 부담"),
+    ("중복·형평성", r"중복|형평|편중", "유사 사업 현황, 지역·대상별 배분 근거"),
+]
+TOPIC_RES = [re.compile(t[1]) for t in TOPICS]
+LONG_PERCENTILE = 0.9  # 문답 길이 상위 10%를 '길게 이어진 문답'으로 본다
+
+
 def clean(fragment):
     """회의록 HTML 조각을 줄바꿈이 살아 있는 글로 바꾼다."""
     s = re.sub(r"(?i)<br\s*/?>|</p>|<hr\s*/?>", "\n", fragment)
@@ -125,11 +151,15 @@ def threads_of(blocks):
             t["k"] = "report" if longest > 600 else "chair"
         else:
             t["k"] = "qa"
-        t["p"], t["r"] = [], []
+        t["p"], t["r"], t["u"], t["tp"] = [], [], [], []
         if t["k"] == "report":
             continue
+        asked = "\n".join(b[2] for b in t["b"] if b[0] == "m")
+        t["tp"] = [i for i, rx in enumerate(TOPIC_RES) if rx.search(asked)]
         for b in t["b"]:
             for s in sentences(b[2]):
+                if b[0] == "o" and STUCK.search(s):
+                    t["u"].append([b[4], s, b[3]])
                 if b[0] == "o" and PROMISE.search(s) and len(s) > 12:
                     t["p"].append([b[4], s, b[3]])
                 elif b[0] == "m" and REQUEST.search(s):
@@ -272,6 +302,8 @@ def main():
 
     depts = defaultdict(lambda: {"n": 0, "years": defaultdict(int), "uids": []})
     meetings = []
+    topic_stat = [{"n": 0, "depts": set(), "cand": []} for _ in TOPICS]
+    lengths = []
     for m in meta["meetings"]:
         path = CACHE / "minutes" / f"{m['uid']}.html"
         if not path.exists():
@@ -283,6 +315,20 @@ def main():
         if not threads:
             continue
         for t in threads:
+            if t["k"] == "qa":
+                lengths.append(len(t["b"]))
+                for i in t["tp"]:
+                    st = topic_stat[i]
+                    st["n"] += 1
+                    st["depts"].update(t["d"])
+                    for b in t["b"]:
+                        if b[0] != "m":
+                            continue
+                        for sent in sentences(b[2]):
+                            if 40 <= len(sent) <= 170 and TOPIC_RES[i].search(sent) and \
+                                    re.search(r"\?$|주세요\.?$|바랍니다\.?$|부탁드\S*$", sent):
+                                st["cand"].append({"u": m["uid"], "i": b[3], "m": t["m"], "n": t["n"],
+                                                   "d": t["d"][0], "y": year, "s": sent})
             for d in t["d"]:
                 e = depts[d]
                 if t["k"] == "qa":
@@ -303,6 +349,26 @@ def main():
     (DATA / "index.js").write_text(
         "window.COUNCIL_INDEX=" + json.dumps(index, ensure_ascii=False, separators=(",", ":")) + ";\n",
         encoding="utf-8")
+    # 주제별로 다른 부서가 실제 받은 질문 예시를 고른다(최근 연도, 부서·의원이 겹치지 않게).
+    current = set(meta.get("current_members", {}))
+    topics = []
+    for (name, _, prep), st in zip(TOPICS, topic_stat):
+        picked, seen_d, seen_m = [], set(), defaultdict(int)
+        for c in sorted(st["cand"], key=lambda c: (-c["y"], c["m"] not in current, -len(c["s"]))):
+            if c["d"] in seen_d or seen_m[c["m"]] >= 2:
+                continue
+            seen_d.add(c["d"])
+            seen_m[c["m"]] += 1
+            picked.append(c)
+            if len(picked) == 12:
+                break
+        topics.append({"name": name, "prep": prep, "n": st["n"], "depts": len(st["depts"]), "ex": picked})
+    lengths.sort()
+    long_at = lengths[int(len(lengths) * LONG_PERCENTILE)] if lengths else 0
+    (DATA / "topics.js").write_text(
+        "window.COUNCIL_TOPICS=" + json.dumps({"topics": topics, "longAt": long_at, "qa": len(lengths)},
+                                              ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
+    print("단골 주제:", ", ".join(f"{t['name']} {t['n']}" for t in topics))
     build_findings(depts)
     size = sum(p.stat().st_size for p in DATA.rglob("*.js")) / 1e6
     print(f"회의록 {len(meetings)}건, 부서명 {len(depts)}개, 자료 크기 {size:.1f}MB")

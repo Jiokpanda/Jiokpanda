@@ -82,6 +82,23 @@ td button.name { background: none; border: 0; padding: 0; color: var(--accent); 
 .item .meta button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; }
 .item.promise { border-left: 4px solid var(--accent); }
 .item.request { border-left: 4px solid var(--warn); }
+.tabsep { flex: 0 0 1px; background: var(--line); margin: 8px 8px; }
+.item.check { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
+.item.check .cbody { min-width: 0; }
+.cform { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; border-left: 1px solid var(--line); }
+.cform.wide { border-left: 0; padding: 4px 14px 10px; }
+.cform select, .cform textarea { font: inherit; font-size: 14px; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; }
+.cform textarea { resize: vertical; min-height: 44px; }
+@media (max-width: 720px) {
+  .item.check { grid-template-columns: minmax(0, 1fr); }
+  .item.check .cform { border-left: 0; border-top: 1px solid var(--line); }
+}
+.item.topic .asked { padding-bottom: 6px; }
+details.examples { padding: 0 14px 10px; font-size: 14px; }
+details.examples summary { cursor: pointer; color: var(--accent); padding: 4px 0; }
+.ex { padding: 8px 0; border-top: 1px solid var(--line); }
+.ex .meta { padding: 2px 0 0; }
+.kind.k-약속 { background: var(--member); color: var(--text); }
 .kind { display: inline-block; font-size: 12px; font-weight: 700; padding: 0 8px; border-radius: 4px; margin-right: 8px; background: var(--accent-soft); color: var(--accent); vertical-align: 2px; }
 .kind.k-시정 { background: var(--warn-soft); color: var(--warn); }
 details.thread > summary { list-style: none; cursor: pointer; padding: 12px 14px; }
@@ -106,6 +123,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
 @media print {
   body { background: #fff; font-size: 11pt; }
   .search, .tabs, .filters, .printbtn, .more { display: none !important; }
+  .cform textarea { border: 1px solid #999; min-height: 60px; }
   .item, .stat, .tablebox { break-inside: avoid; }
 }
 </style>
@@ -131,7 +149,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     <ul>
       <li>출처: <a href="https://council.yongin.go.kr/kr/minutes/search.do" target="_blank" rel="noopener">용인특례시의회 회의록</a> 중 행정사무감사 회의록. <span id="gen"></span></li>
       <li>부서는 답변자의 직함(예: “행정과장”)으로 구분합니다. 조직 개편으로 이름이 바뀐 부서는 옛 이름도 함께 골라 주세요.</li>
-      <li>‘약속·검토 답변’과 ‘자료 요구’는 문장 표현을 기준으로 자동으로 골라낸 것이라 빠지거나 잘못 잡힌 것이 있을 수 있습니다. 중요한 내용은 ‘원문’에서 확인하세요.</li>
+      <li>‘약속 답변’, ‘자료 요구’, ‘단골 질문’, ‘막혔던 질문’은 문장 표현을 기준으로 자동으로 골라낸 것이라 빠지거나 잘못 잡힌 것이 있을 수 있습니다. 중요한 내용은 ‘원문’에서 확인하세요.</li>
       <li>‘결과보고서 지적사항’은 <a href="https://council.yongin.go.kr/kr/inspectionBBS.do" target="_blank" rel="noopener">의회 행정사무감사 게시판</a>에 올라온 연도별 결과보고서의 처리의견 표에서 가져왔습니다. 보고서의 부서 표기가 회의록과 다르면 연결되지 않을 수 있습니다.</li>
     </ul>
   </footer>
@@ -139,6 +157,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
 
 <script src="data/index.js"></script>
 <script src="data/findings.js"></script>
+<script src="data/topics.js"></script>
 <script>
 (function () {
   "use strict";
@@ -159,7 +178,19 @@ footer ul { padding-left: 18px; margin: 6px 0; }
   var selected = {};          // 고른 부서명
   var loaded = {};            // 회의록 uid → 자료
   var FINDINGS = window.COUNCIL_FINDINGS || [];
-  var state = { tab: FINDINGS.length ? "finding" : "promise", year: "", member: "", kind: "", word: "", limit: 30 };
+  var TOPICS = window.COUNCIL_TOPICS || { topics: [], longAt: 100000, qa: 0 };
+  var state = { tab: "check", year: "", member: "", kind: "", word: "", limit: 30 };
+  // 점검표·메모 입력은 이 PC의 브라우저에만 저장한다.
+  var store = {
+    get: function (k) { try { return localStorage.getItem("council:" + k) || ""; } catch (e) { return ""; } },
+    set: function (k, v) { try { if (v) localStorage.setItem("council:" + k, v); else localStorage.removeItem("council:" + k); } catch (e) {} }
+  };
+  function hash(str) {
+    var h = 5381;
+    for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }
+  function checkGet(id) { try { return JSON.parse(store.get("check:" + id) || "{}"); } catch (e) { return {}; } }
   // 회의록과 결과보고서의 부서 표기를 맞추는 열쇠(collector/build.py의 dept_key와 같은 규칙)
   function deptKey(name) { return name.replace(/\(.*?\)|\s/g, "").replace(/구청/g, "구"); }
 
@@ -309,6 +340,23 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       r.t.r.forEach(function (q) { requests.push({ r: r, s: q[0], idx: q[1] }); });
     });
 
+    var stuck = [];
+    talks.forEach(function (r) {
+      (r.t.u || []).forEach(function (u) { if (selected[u[0]]) stuck.push({ r: r, dept: u[0], s: u[1], idx: u[2] }); });
+    });
+    var longs = qa.filter(function (r) { return r.t.b.length >= TOPICS.longAt; })
+      .sort(function (a, b) { return b.t.b.length - a.t.b.length; });
+    var askedBefore = function (r, idx) {
+      var speaker = "", asked = "";
+      for (var k = 0; k < r.t.b.length; k++) {
+        if (r.t.b[k][3] === idx) { speaker = r.t.b[k][1]; break; }
+        if (r.t.b[k][0] === "m") asked = r.t.b[k][2];
+      }
+      asked = asked.replace(/\n/g, " ");
+      if (asked.length > 170) asked = "…" + asked.slice(-170);
+      return { speaker: speaker, asked: asked };
+    };
+
     var h = '<div class="titlebar"><h2>' + esc(depts.join(", ")) + '</h2><button class="printbtn" type="button" id="print">인쇄</button></div>';
     h += '<div class="stats">' +
       (FINDINGS.length ? '<div class="stat"><b>' + findings.length + "</b><span>결과보고서 지적사항 (시정 " + kindCount["시정"] +
@@ -333,12 +381,26 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       h += "</tbody></table></div>";
     }
 
-    var tabs = (FINDINGS.length ? [["finding", "결과보고서 지적사항 " + findings.length]] : []).concat([["promise", "약속·검토 답변 " + promises.length], ["request", "자료 요구 " + requests.length], ["all", "질의·답변 전문 " + all.length]]);
+    var tabs = [["check", "조치 점검표"], ["topic", "단골 질문"], ["stuck", "막혔던 질문 " + stuck.length], null]
+      .concat(FINDINGS.length ? [["finding", "지적사항 " + findings.length]] : [])
+      .concat([["promise", "약속 답변 " + promises.length], ["request", "자료 요구 " + requests.length], ["all", "문답 전문 " + all.length]]);
     h += '<div class="tabs" role="tablist">' + tabs.map(function (t) {
+      if (!t) return '<span class="tabsep" aria-hidden="true"></span>';
       return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (state.tab === t[0]) + '">' + t[1] + "</button>";
     }).join("") + "</div>";
 
-    h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
+    // 조치 점검표는 한 해씩 본다(기본은 가장 최근 연도).
+    var checkYears = {};
+    findings.forEach(function (f) { checkYears[f.y] = true; });
+    promises.forEach(function (x) { checkYears[x.r.m.year] = true; });
+    checkYears = Object.keys(checkYears).sort().reverse();
+    var cy = checkYears.indexOf(state.year) >= 0 ? state.year : checkYears[0];
+
+    if (state.tab === "check") {
+      h += '<div class="filters"><select id="fyear" aria-label="연도">' +
+        checkYears.map(function (y) { return '<option value="' + y + '"' + (cy === y ? " selected" : "") + ">" + y + "년 행감</option>"; }).join("") + "</select>" +
+        '<button class="printbtn" type="button" id="csv">엑셀용 파일(CSV)로 내보내기</button><span class="count" id="checkprog"></span></div>';
+    } else if (state.tab !== "topic") h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
       ys.map(function (y) { return '<option value="' + y + '"' + (state.year === y ? " selected" : "") + ">" + y + "년</option>"; }).join("") + "</select>" +
       (state.tab === "finding"
         ? '<select id="fkind" aria-label="조치 구분"><option value="">전체 구분</option>' +
@@ -357,7 +419,63 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       lastYear = r.m.year;
       return '<div class="year">' + r.m.year + "년 행정사무감사</div>";
     };
-    if (state.tab === "finding") {
+    var plain = false;  // 건수 줄과 '더 보기'를 쓰지 않는 탭
+    if (state.tab === "check") {
+      plain = true;
+      var rows = findings.filter(function (f) { return String(f.y) === cy; }).map(function (f) {
+        return { id: "f:" + f.y + ":" + hash(f.t), type: f.k || "지적", year: f.y, text: f.t, asked: "",
+          src: f.raw + " · " + f.c + " 결과보고서", link: SITE + "/common/synap/bbsViewer.do?uid=" + f.v };
+      }).concat(promises.filter(function (x) { return String(x.r.m.year) === cy; }).map(function (x) {
+        var ctx = askedBefore(x.r, x.idx);
+        return { id: "p:" + x.r.m.uid + ":" + x.idx + ":" + hash(x.s), type: "약속", year: x.r.m.year, text: x.s, asked: ctx.asked,
+          src: ctx.speaker + " → " + (x.r.t.n || "위원장") + " 위원 · " + where(x.r.m), link: phraseLink(x.r.m, x.s) };
+      }));
+      render.checkRows = rows;
+      body = '<p class="hint">' + cy + "년 행감에서 의회가 요구한 지적사항과 부서가 답변으로 약속한 내용입니다. 올해 감사 전에 조치 결과를 적어 두세요. " +
+        "입력한 내용은 이 PC의 브라우저에만 저장되므로, 보관하거나 공유하려면 파일로 내보내세요.</p>";
+      rows.forEach(function (x) {
+        var v = checkGet(x.id);
+        body += '<div class="item check" data-id="' + esc(x.id) + '"><div class="cbody">' +
+          (x.asked ? '<div class="asked"><b>질의</b> ' + esc(x.asked) + "</div>" : "") +
+          '<div class="quote"><span class="kind k-' + esc(x.type) + '">' + esc(x.type) + "</span>" + esc(x.text) + "</div>" +
+          '<div class="meta"><span>' + esc(x.src) + '</span><a href="' + esc(x.link) + '" target="_blank" rel="noopener">원문</a></div></div>' +
+          '<div class="cform"><select data-check="s" aria-label="조치 상태">' +
+          ["", "조치 완료", "추진 중", "미조치", "해당 없음"].map(function (o) {
+            return '<option value="' + o + '"' + ((v.s || "") === o ? " selected" : "") + ">" + (o || "상태 선택") + "</option>";
+          }).join("") + '</select><textarea data-check="n" rows="3" placeholder="조치 결과, 근거 자료" aria-label="조치 결과">' + esc(v.n || "") + "</textarea></div></div>";
+      });
+      if (!rows.length) body += '<p class="empty">이 부서에 연결된 지적사항이나 약속 답변이 없습니다.</p>';
+    } else if (state.tab === "topic") {
+      plain = true;
+      var noteBase = "topic:" + depts.map(deptKey).sort().join("+") + ":";
+      var list = TOPICS.topics.map(function (t, i) {
+        var ours = talks.filter(function (r) { return r.t.tp && r.t.tp.indexOf(i) >= 0; });
+        return { t: t, i: i, ours: ours };
+      }).sort(function (a, b) { return b.ours.length - a.ours.length || b.t.n - a.t.n; });
+      render.topicRows = {};
+      body = '<p class="hint">지난 4년 행감에서 부서를 가리지 않고 반복해 나온 질의 주제입니다. 우리 부서가 받은 횟수가 많은 순서로 보여 줍니다. ' +
+        "받은 적이 없는 주제도 다른 부서의 질문 예시를 보고 우리 부서 수치를 미리 적어 두세요.</p>";
+      list.forEach(function (x) {
+        var byYear = {};
+        x.ours.forEach(function (r) { byYear[r.m.year] = (byYear[r.m.year] || 0) + 1; });
+        var yearText = Object.keys(byYear).sort().reverse().map(function (y) { return y + "년 " + byYear[y]; }).join(" · ");
+        render.topicRows[x.i] = x.ours;
+        body += '<div class="item topic"><div class="quote"><strong>' + esc(x.t.name) + "</strong>" +
+          '<span class="count"> 우리 부서 ' + (x.ours.length ? x.ours.length + "회 (" + yearText + ")" : "받은 적 없음") +
+          " · 전체 " + x.t.depts + "개 부서에서 " + x.t.n + "회</span></div>" +
+          '<div class="asked"><b>준비할 것</b> ' + esc(x.t.prep) + "</div>" +
+          '<div class="cform wide"><textarea data-note="' + esc(noteBase + x.t.name) + '" rows="2" placeholder="우리 부서 수치·답변 메모" aria-label="' + esc(x.t.name) + ' 메모">' +
+          esc(store.get(noteBase + x.t.name)) + "</textarea></div>" +
+          '<details class="examples"><summary>다른 부서가 받은 질문 예시 ' + x.t.ex.length + "개</summary>" +
+          x.t.ex.map(function (e) {
+            return '<div class="ex">' + esc(e.s) + '<div class="meta"><span>' + esc(e.n) + " 위원" +
+              (IDX.currentMembers[e.m] ? '<span class="badge">현역</span>' : "") + "</span><span>" + esc(e.d) + " · " + e.y + "년</span>" +
+              '<a href="' + SITE + "/viewer/minutes.do?uid=" + e.u + "&mem_sch=" + e.m + "&con_idx_sch=" + e.i + '" target="_blank" rel="noopener">원문</a></div></div>';
+          }).join("") + "</details>" +
+          (x.ours.length ? '<div class="meta"><button type="button" data-topic="' + x.i + '">우리 부서가 받은 문답 ' + x.ours.length + "건 보기</button></div>" +
+            '<div data-tslot="' + x.i + '"></div>' : "") + "</div>";
+      });
+    } else if (state.tab === "finding") {
       var fs = findings.filter(function (f) {
         return (!state.year || String(f.y) === state.year) && (!state.kind || f.k === state.kind) &&
           (!state.word || f.t.indexOf(state.word) >= 0);
@@ -373,23 +491,19 @@ footer ul { padding-left: 18px; margin: 6px 0; }
         shown++;
       });
     } else if (state.tab === "all") {
-      var rows = all.filter(function (r) { return pass(r, r.t.b.map(function (b) { return b[2]; }).join("\n")); });
-      total = rows.length;
-      rows.slice(0, state.limit).forEach(function (r) { body += yearHead(r) + threadHtml(r, false); shown++; });
+      var threads = all.filter(function (r) { return pass(r, r.t.b.map(function (b) { return b[2]; }).join("\n")); });
+      total = threads.length;
+      threads.slice(0, state.limit).forEach(function (r) { body += yearHead(r) + threadHtml(r, false); shown++; });
     } else {
-      var items = (state.tab === "promise" ? promises : requests).filter(function (x) { return pass(x.r, x.s); });
+      var source = state.tab === "promise" ? promises : state.tab === "stuck" ? stuck : requests;
+      var items = source.filter(function (x) { return pass(x.r, x.s); });
       total = items.length;
+      if (state.tab === "stuck") body += '<p class="hint">답변자가 그 자리에서 답하지 못하고 “확인해 보겠습니다”, “별도로 보고드리겠습니다”로 넘긴 질문입니다. 같은 질문이 다시 나올 때를 대비해 수치를 준비해 두세요.</p>';
       items.slice(0, state.limit).forEach(function (x, i) {
-        var r = x.r, isP = state.tab === "promise";
-        var speaker = "", asked = "";
-        for (var k = 0; k < r.t.b.length; k++) {
-          if (r.t.b[k][3] === x.idx) { speaker = r.t.b[k][1]; break; }
-          if (r.t.b[k][0] === "m") asked = r.t.b[k][2];
-        }
-        asked = asked.replace(/\n/g, " ");
-        if (asked.length > 170) asked = "…" + asked.slice(-170);
+        var r = x.r, isP = state.tab !== "request";
+        var ctx = askedBefore(r, x.idx), speaker = ctx.speaker, asked = ctx.asked;
         var link = isP ? phraseLink(r.m, x.s) : memberLink(r.m, r.t, x.idx);
-        body += yearHead(r) + '<div class="item ' + (isP ? "promise" : "request") + '">' + (isP && asked ? '<div class="asked"><b>질의</b> ' + esc(asked) + "</div>" : "") +
+        body += yearHead(r) + '<div class="item ' + (state.tab === "promise" ? "promise" : "request") + '">' + (isP && asked ? '<div class="asked"><b>질의</b> ' + esc(asked) + "</div>" : "") +
           '<div class="quote">' + (isP ? "<b>답변</b> " : "") + hl(x.s, state.word) + "</div>" +
           '<div class="meta"><span>' + esc(speaker) + (isP ? " → " + asker(r.t) : "") + "</span><span>" + esc(where(r.m)) + "</span>" +
           '<button type="button" data-ctx="' + i + '">앞뒤 문답 보기</button>' +
@@ -398,11 +512,41 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       });
       render.items = items;
     }
-    if (!total) body = '<p class="empty">조건에 맞는 내용이 없습니다.</p>';
+    if (!total && !plain) body += '<p class="empty">조건에 맞는 내용이 없습니다.</p>';
+    var tail = "";
+    if (state.tab === "stuck") {
+      var longShown = longs.filter(function (r) { return pass(r, r.t.b.map(function (b) { return b[2]; }).join("\n")); });
+      tail = "<h2>길게 이어진 문답<small>발언 " + TOPICS.longAt + "개 이상(전체 문답의 상위 10%). 답변이 한 번에 받아들여지지 않은 쟁점일 가능성이 높습니다.</small></h2>";
+      lastYear = "";
+      tail += longShown.length ? longShown.slice(0, 15).map(function (r) { return threadHtml(r, false); }).join("") : '<p class="empty">해당하는 문답이 없습니다.</p>';
+    }
     if (state.tab === "finding") body = '<p class="hint">의회가 감사 뒤 채택한 결과보고서의 지적사항입니다. 시정·처리·건의는 의회가 요구한 조치 구분입니다.</p>' + body;
-    h += '<p class="count">' + total + "건 중 " + shown + "건 표시</p>" + body;
-    if (shown < total) h += '<button class="more" type="button" id="more">더 보기</button>';
-    out.innerHTML = h;
+    h += (plain ? "" : '<p class="count">' + total + "건 중 " + shown + "건 표시</p>") + body;
+    if (!plain && shown < total) h += '<button class="more" type="button" id="more">더 보기</button>';
+    out.innerHTML = h + tail;
+    if (state.tab === "check") checkProgress();
+  }
+  function checkProgress() {
+    var rows = render.checkRows || [], done = 0;
+    rows.forEach(function (x) { var v = checkGet(x.id); if (v.s || v.n) done++; });
+    var el = $("checkprog");
+    if (el) el.textContent = rows.length + "건 중 " + done + "건 입력";
+  }
+  function exportCsv() {
+    var cell = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
+    var lines = [["구분", "연도", "내용", "질의", "출처", "상태", "조치 결과"].map(cell).join(",")];
+    (render.checkRows || []).forEach(function (x) {
+      var v = checkGet(x.id);
+      lines.push([x.type, x.year, x.text, x.asked, x.src, v.s || "", v.n || ""].map(cell).join(","));
+    });
+    var blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    // 한글 파일명은 브라우저 환경에 따라 무시될 수 있어 영문·숫자만 쓴다.
+    var first = (render.checkRows || [])[0];
+    a.download = "audit-checklist" + (first ? "-" + first.year : "") + ".csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
   }
 
   out.addEventListener("click", function (e) {
@@ -414,6 +558,13 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       window.print(); return;
     }
     if (el.id === "more") { state.limit += 50; render(); return; }
+    if (el.id === "csv") { exportCsv(); return; }
+    if (el.hasAttribute("data-topic")) {
+      var ti = el.getAttribute("data-topic"), tslot = out.querySelector('[data-tslot="' + ti + '"]');
+      if (tslot.innerHTML) tslot.innerHTML = "";
+      else tslot.innerHTML = render.topicRows[ti].map(function (r) { return threadHtml(r, false); }).join("");
+      return;
+    }
     if (el.hasAttribute("data-tab")) { state.tab = el.getAttribute("data-tab"); state.limit = 30; render(); return; }
     if (el.hasAttribute("data-member")) {
       state.member = el.getAttribute("data-member"); state.tab = "all"; state.limit = 30; render();
@@ -425,13 +576,26 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       else { slot.innerHTML = threadHtml(render.items[i].r, true); el.textContent = "앞뒤 문답 닫기"; }
     }
   });
+  function saveField(el) {
+    if (el.hasAttribute("data-note")) { store.set(el.getAttribute("data-note"), el.value); return true; }
+    if (el.hasAttribute("data-check")) {
+      var card = el.closest("[data-id]");
+      var v = { s: card.querySelector('[data-check="s"]').value, n: card.querySelector('[data-check="n"]').value };
+      store.set("check:" + card.getAttribute("data-id"), v.s || v.n ? JSON.stringify(v) : "");
+      checkProgress();
+      return true;
+    }
+    return false;
+  }
   out.addEventListener("change", function (e) {
+    if (saveField(e.target)) return;
     if (e.target.id === "fyear") { state.year = e.target.value; state.limit = 30; render(); }
     if (e.target.id === "fkind") { state.kind = e.target.value; state.limit = 30; render(); }
     if (e.target.id === "fmember") { state.member = e.target.value; state.limit = 30; render(); }
   });
   var timer;
   out.addEventListener("input", function (e) {
+    if (saveField(e.target)) return;
     if (e.target.id !== "fword") return;
     clearTimeout(timer);
     var v = e.target.value;
