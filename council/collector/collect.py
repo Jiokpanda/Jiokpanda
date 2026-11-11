@@ -30,6 +30,16 @@ COMMITTEES = {
     "J043": "경제환경위원회",
     "J051": "도시건설위원회",
 }
+# 행감 전에 열린 일반 회의(업무보고, 추경·결산 심사 등). 최근 대수만 받는다.
+REGULAR = {
+    "A011": "본회의",
+    "C011": "의회운영위원회",
+    "C023": "자치행정위원회",
+    "C042": "문화복지위원회",
+    "C043": "경제환경위원회",
+    "C051": "도시건설위원회",
+    "E011": "예산결산특별위원회",
+}
 DELAY = 1.0  # 요청 사이 간격(초). 의회 서버에 부담을 주지 않기 위함.
 
 
@@ -121,7 +131,8 @@ def list_meetings(term, code):
                 "term": int(re.sub(r"\D", "", cells[0])),
                 "session": int(re.sub(r"\D", "", cells[1])),
                 "day": cells[2],
-                "committee": COMMITTEES[code],
+                "committee": COMMITTEES.get(code) or REGULAR[code],
+                "audit": code in COMMITTEES,
                 "code": code,
                 "date": cells[4].replace(".", "-"),
                 "target": target.group(1).strip() if target else "",
@@ -134,8 +145,56 @@ def list_meetings(term, code):
         page += 1
 
 
+def table_rows(doc):
+    """목록 화면의 첫 표를 줄 단위로 돌려준다."""
+    table = doc[doc.find("<table"):]
+    return re.findall(r"(?is)<tr>(.*?)</tr>", table[:table.find("</table>")])[1:]
+
+
+def collect_extras(term):
+    """의원 프로필에 쓸 5분 자유발언·시정질문·의안 목록을 받는다."""
+    speeches = {}
+    for kind, path in (("free", "free.do"), ("qna", "qna2.do")):
+        page = 1
+        while True:
+            doc = fetch(f"{BASE}/kr/minutes/{path}?th_sch={term}&page={page}")
+            found = 0
+            for row in table_rows(doc):
+                link = re.search(r'minutes\.do\?uid=(\d+)&(?:amp;)?mem_sch=(\d*)&(?:amp;)?con_idx_sch=(\d+)[^"]*"[^>]*>(.*?)</a>', row, re.S)
+                if not link:
+                    continue
+                found += 1
+                cells = [strip(c) for c in re.findall(r"(?is)<td[^>]*>(.*?)</td>", row)]
+                key = (kind, link.group(1), link.group(3))
+                speeches[key] = {"kind": kind, "uid": int(link.group(1)), "member": link.group(2),
+                                 "idx": int(link.group(3)), "title": strip(link.group(4)),
+                                 "date": cells[-1].replace(".", "-")}
+            if found < 10:
+                break
+            page += 1
+    bills, page = {}, 1
+    while True:
+        doc = fetch(f"{BASE}/kr/bill.do?th_sch={term}&page={page}")
+        found = 0
+        for row in table_rows(doc):
+            link = re.search(r"billview\.do\?uid=(\d+)", row)
+            cells = [strip(c) for c in re.findall(r"(?is)<td[^>]*>(.*?)</td>", row)]
+            if not link or len(cells) < 5:
+                continue
+            found += 1
+            bills[int(link.group(1))] = {"uid": int(link.group(1)), "no": cells[0], "title": cells[1],
+                                         "lead": cells[2], "date": cells[4]}
+        if found < 10:
+            break
+        page += 1
+    (CACHE / "extras.json").write_text(json.dumps(
+        {"term": int(term), "speeches": list(speeches.values()), "bills": list(bills.values())},
+        ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"5분 자유발언·시정질문 {len(speeches)}건, 의안 {len(bills)}건")
+
+
 def collect_reports(years):
-    """행정사무감사 게시판에서 결과보고서를 찾아, 문서 뷰어가 변환한 HTML을 받는다."""
+    """행정사무감사 게시판에서 결과보고서와 최근 계획서를 찾아, 문서 뷰어가 변환한 HTML을 받는다."""
     out_dir = CACHE / "reports"
     out_dir.mkdir(parents=True, exist_ok=True)
     posts, page = [], 1
@@ -151,9 +210,16 @@ def collect_reports(years):
         page += 1
 
     reports = []
+    plan_years = [int(y) for y in re.findall(r"(20\d\d)년도", " ".join(t for _, t in posts if "계획서" in t))]
     for uid, title in posts:
         year = re.search(r"(20\d\d)년도", title)
-        if "결과보고서" not in title or not year or int(year.group(1)) not in years:
+        if not year:
+            continue
+        if "결과보고서" in title and int(year.group(1)) in years:
+            kind = "result"
+        elif "계획서" in title and int(year.group(1)) == max(plan_years):
+            kind = "plan"   # 가장 최근 계획서만(감사 일정과 감사위원 명단)
+        else:
             continue
         view = fetch(f"{BASE}/kr/inspectionBBSview.do?uid={uid}")
         # 첨부파일 이름 바로 뒤에 '바로보기' 뷰어 링크가 붙어 있다.
@@ -163,7 +229,7 @@ def collect_reports(years):
         for name, vid in files:
             name = html.unescape(name)
             folder = out_dir / vid
-            info = {"year": int(year.group(1)), "post": uid, "title": title, "file": name, "viewer": int(vid)}
+            info = {"kind": kind, "year": int(year.group(1)), "post": uid, "title": title, "file": name, "viewer": int(vid)}
             reports.append(info)
             if (folder / "done").exists():
                 continue
@@ -180,13 +246,14 @@ def collect_reports(years):
             except (NotFound, KeyError, AttributeError) as e:
                 print(f"  변환본을 받지 못함: {name} ({e})", flush=True)
     (CACHE / "reports.json").write_text(json.dumps(reports, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"결과보고서 파일 {len(reports)}개")
+    print(f"결과보고서·계획서 파일 {len(reports)}개")
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--terms", default="9,10", help="수집할 대수(쉼표로 구분)")
-    ap.add_argument("--reports-only", action="store_true", help="결과보고서만 받기")
+    ap.add_argument("--regular-terms", default="10", help="일반 회의록까지 받을 대수(쉼표로 구분)")
+    ap.add_argument("--reports-only", action="store_true", help="결과보고서·계획서만 받기")
     args = ap.parse_args()
     (CACHE / "minutes").mkdir(parents=True, exist_ok=True)
     if args.reports_only:
@@ -197,6 +264,13 @@ def main():
         for code, name in COMMITTEES.items():
             found = list_meetings(term, code)
             print(f"제{term}대 {name} 행정사무감사: {len(found)}건", flush=True)
+            for m in found:
+                meetings[m["uid"]] = m
+    regular = [t.strip() for t in args.regular_terms.split(",") if t.strip()]
+    for term in regular:
+        for code, name in REGULAR.items():
+            found = list_meetings(term, code)
+            print(f"제{term}대 {name}: {len(found)}건", flush=True)
             for m in found:
                 meetings[m["uid"]] = m
 
@@ -223,7 +297,9 @@ def main():
                     "current_members": members}, ensure_ascii=False, indent=1),
         encoding="utf-8")
     print(f"완료: 회의록 {done}건, 현역 의원 {len(members)}명")
-    collect_reports({int(m["date"][:4]) for m in meetings.values()} or range(2022, 2100))
+    if regular:
+        collect_extras(max(regular, key=int))
+    collect_reports({int(m["date"][:4]) for m in meetings.values() if m["audit"]} or range(2022, 2100))
 
 
 if __name__ == "__main__":

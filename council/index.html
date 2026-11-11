@@ -82,6 +82,10 @@ td button.name { background: none; border: 0; padding: 0; color: var(--accent); 
 .item .meta button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; }
 .item.promise { border-left: 4px solid var(--accent); }
 .item.request { border-left: 4px solid var(--warn); }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; margin-left: 6px; }
+.item.member .asked { color: var(--text); }
+.item.member .tag { margin-left: 0; }
+.filters a { font-size: 14px; }
 .tabsep { flex: 0 0 1px; background: var(--line); margin: 8px 8px; }
 .item.check { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
 .item.check .cbody { min-width: 0; }
@@ -158,6 +162,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
 <script src="data/index.js"></script>
 <script src="data/findings.js"></script>
 <script src="data/topics.js"></script>
+<script src="data/members.js"></script>
 <script>
 (function () {
   "use strict";
@@ -179,6 +184,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
   var loaded = {};            // 회의록 uid → 자료
   var FINDINGS = window.COUNCIL_FINDINGS || [];
   var TOPICS = window.COUNCIL_TOPICS || { topics: [], longAt: 100000, qa: 0 };
+  var MEMBERS = window.COUNCIL_MEMBERS || { members: {}, plans: [] };
   var state = { tab: "check", year: "", member: "", kind: "", word: "", limit: 30 };
   // 점검표·메모 입력은 이 PC의 브라우저에만 저장한다.
   var store = {
@@ -225,7 +231,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     list.sort(function (a, b) { return (selected[b] ? 1 : 0) - (selected[a] ? 1 : 0) || IDX.depts[b].n - IDX.depts[a].n; });
     $("chips").innerHTML = list.slice(0, 60).map(function (d) {
       return '<button class="chip" type="button" aria-pressed="' + (selected[d] ? "true" : "false") + '" data-dept="' + esc(d) + '">' +
-        esc(d) + "<small>" + IDX.depts[d].n + "건 · " + deptYears(d) + "</small></button>";
+        esc(d) + "<small>" + (IDX.depts[d].n ? IDX.depts[d].n + "건 · " + deptYears(d) : "올해 " + (IDX.depts[d].pn || 0) + "건") + "</small></button>";
     }).join("");
   }
   $("q").addEventListener("input", renderChips);
@@ -234,7 +240,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     if (!b) return;
     var d = b.getAttribute("data-dept");
     if (selected[d]) delete selected[d]; else selected[d] = true;
-    state.year = ""; state.member = ""; state.limit = 30;
+    state.year = ""; state.member = ""; state.limit = 30; state.committee = undefined;
     renderChips();
     loadAndRender();
   });
@@ -260,17 +266,17 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     var depts = Object.keys(selected);
     if (!depts.length) { out.innerHTML = ""; return; }
     var uids = {};
-    depts.forEach(function (d) { IDX.depts[d].uids.forEach(function (u) { uids[u] = true; }); });
+    depts.forEach(function (d) { IDX.depts[d].uids.concat(IDX.depts[d].pre || []).forEach(function (u) { uids[u] = true; }); });
     var my = ++runId;
     out.innerHTML = '<p class="empty">회의록을 불러오는 중입니다…</p>';
     Promise.all(Object.keys(uids).map(load)).then(function () { if (my === runId) render(); });
   }
 
   /* ---------- 브리핑 만들기 ---------- */
-  function collect() {
+  function collect(field) {
     var depts = Object.keys(selected), rows = [];
     var uids = {};
-    depts.forEach(function (d) { IDX.depts[d].uids.forEach(function (u) { uids[u] = true; }); });
+    depts.forEach(function (d) { (IDX.depts[d][field || "uids"] || []).forEach(function (u) { uids[u] = true; }); });
     Object.keys(uids).forEach(function (u) {
       var m = meetingByUid[u];
       (loaded[u] ? loaded[u].threads : []).forEach(function (t) {
@@ -340,6 +346,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       r.t.r.forEach(function (q) { requests.push({ r: r, s: q[0], idx: q[1] }); });
     });
 
+    var pre = collect("pre").filter(function (r) { return r.t.k !== "report"; });
     var stuck = [];
     talks.forEach(function (r) {
       (r.t.u || []).forEach(function (u) { if (selected[u[0]]) stuck.push({ r: r, dept: u[0], s: u[1], idx: u[2] }); });
@@ -381,7 +388,10 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       h += "</tbody></table></div>";
     }
 
-    var tabs = [["check", "조치 점검표"], ["topic", "단골 질문"], ["stuck", "막혔던 질문 " + stuck.length], null]
+    var tabs = [["check", "조치 점검표"]]
+      .concat(MEMBERS.plans.length ? [["panel", "감사위원"]] : [])
+      .concat(pre.length ? [["pre", "올해 질의 " + pre.length]] : [])
+      .concat([["topic", "단골 질문"], ["stuck", "막혔던 질문 " + stuck.length], null])
       .concat(FINDINGS.length ? [["finding", "지적사항 " + findings.length]] : [])
       .concat([["promise", "약속 답변 " + promises.length], ["request", "자료 요구 " + requests.length], ["all", "문답 전문 " + all.length]]);
     h += '<div class="tabs" role="tablist">' + tabs.map(function (t) {
@@ -400,7 +410,13 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       h += '<div class="filters"><select id="fyear" aria-label="연도">' +
         checkYears.map(function (y) { return '<option value="' + y + '"' + (cy === y ? " selected" : "") + ">" + y + "년 행감</option>"; }).join("") + "</select>" +
         '<button class="printbtn" type="button" id="csv">엑셀용 파일(CSV)로 내보내기</button><span class="count" id="checkprog"></span></div>';
-    } else if (state.tab !== "topic") h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
+    } else if (state.tab === "pre") {
+      var preAskers = {};
+      pre.forEach(function (r) { if (r.t.m) preAskers[r.t.m] = r.t.n; });
+      h += '<div class="filters"><select id="fmember" aria-label="의원"><option value="">전체 의원</option>' +
+        Object.keys(preAskers).map(function (c) { return '<option value="' + c + '"' + (state.member === c ? " selected" : "") + ">" + esc(preAskers[c]) + "</option>"; }).join("") + "</select>" +
+        '<input id="fword" type="search" placeholder="내용에서 찾기 (예: 예산, 민원)" value="' + esc(state.word) + '" aria-label="내용에서 찾기"></div>';
+    } else if (state.tab !== "topic" && state.tab !== "panel") h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
       ys.map(function (y) { return '<option value="' + y + '"' + (state.year === y ? " selected" : "") + ">" + y + "년</option>"; }).join("") + "</select>" +
       (state.tab === "finding"
         ? '<select id="fkind" aria-label="조치 구분"><option value="">전체 구분</option>' +
@@ -410,7 +426,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       '<input id="fword" type="search" placeholder="내용에서 찾기 (예: 예산, 민원)" value="' + esc(state.word) + '" aria-label="내용에서 찾기"></div>';
 
     var pass = function (r, text) {
-      return (!state.year || String(r.m.year) === state.year) && (!state.member || r.t.m === state.member) &&
+      return (state.tab === "pre" || !state.year || String(r.m.year) === state.year) && (!state.member || r.t.m === state.member) &&
         (!state.word || text.indexOf(state.word) >= 0);
     };
     var body = "", shown = 0, total = 0, lastYear = "";
@@ -475,6 +491,52 @@ footer ul { padding-left: 18px; margin: 6px 0; }
           (x.ours.length ? '<div class="meta"><button type="button" data-topic="' + x.i + '">우리 부서가 받은 문답 ' + x.ours.length + "건 보기</button></div>" +
             '<div data-tslot="' + x.i + '"></div>' : "") + "</div>";
       });
+    } else if (state.tab === "panel") {
+      plain = true;
+      var hits = [];   // 고른 부서가 들어 있는 감사 일정
+      MEMBERS.plans.forEach(function (pl, pi) {
+        pl.days.forEach(function (d) { if (d.keys.some(function (k) { return keys[k]; })) hits.push({ pl: pl, pi: pi, d: d }); });
+      });
+      var pi = state.committee !== undefined && MEMBERS.plans[state.committee] ? Number(state.committee) : (hits.length ? hits[0].pi : 0);
+      var plan = MEMBERS.plans[pi];
+      body = '<div class="filters"><select id="fcommittee" aria-label="위원회">' + MEMBERS.plans.map(function (pl, i) {
+        return '<option value="' + i + '"' + (i === pi ? " selected" : "") + ">" + esc(pl.name) + "</option>";
+      }).join("") + "</select>" + '<a href="' + SITE + "/common/synap/bbsViewer.do?uid=" + plan.viewer + '" target="_blank" rel="noopener">' + plan.year + "년 감사 계획서 보기</a></div>";
+      body += hits.length
+        ? '<div class="item"><div class="quote"><strong>올해 감사 일정</strong></div>' + hits.map(function (x) {
+            return '<div class="asked"><b>' + esc(x.pl.name) + "</b> " + esc(x.d.day + " " + x.d.date) + " · " + esc(x.d.text.replace(/\s*\n\s*/g, " ")) + "</div>";
+          }).join("") + '<div class="meta"></div></div>'
+        : '<p class="hint">' + plan.year + "년 감사 계획서의 일정표에서 이 부서 이름을 찾지 못했습니다. 소관 위원회를 직접 골라 주세요.</p>";
+      body += '<p class="hint">' + esc(plan.name) + " 감사위원 " + plan.members.length + "명입니다. 행감 이력은 2022~2025년 회의록, 5분 자유발언·시정질문·의안은 제10대(올해) 기준입니다.</p>";
+      plan.members.forEach(function (pm) {
+        var mb = MEMBERS.members[pm.code] || { audit: {}, topics: [], depts: [], pre: 0, preDepts: [], speeches: [], bills: [] };
+        var auditYears = Object.keys(mb.audit).sort().reverse();
+        var auditTotal = auditYears.reduce(function (a, y) { return a + mb.audit[y]; }, 0);
+        var toUs = qa.filter(function (r) { return r.t.m === pm.code; }).length;
+        var preUs = pre.filter(function (r) { return r.t.m === pm.code; }).length;
+        var pairs = function (list) { return list.map(function (x) { return esc(x[0]) + " " + x[1]; }).join(" · "); };
+        body += '<div class="item member"><div class="quote"><strong>' + esc(pm.name) + "</strong>" +
+          '<span class="kind k-약속">' + esc(pm.role) + "</span>" + (auditTotal ? "" : '<span class="tag">행감 이력 없음</span>') + "</div>" +
+          '<div class="asked"><b>우리 부서</b> 지난 행감 질의 ' + toUs + "회 · 올해 회의 질의 " + preUs + "회" +
+          (toUs ? ' <button type="button" class="linkbtn" data-member="' + pm.code + '">문답 보기</button>' : "") +
+          (preUs ? ' <button type="button" class="linkbtn" data-premember="' + pm.code + '">올해 질의 보기</button>' : "") + "</div>" +
+          (auditTotal ? '<div class="asked"><b>행감 이력</b> ' + auditYears.map(function (y) { return y + "년 " + mb.audit[y]; }).join(" · ") + " (전체 부서 대상 질의 묶음 수)</div>" +
+            '<div class="asked"><b>자주 다룬 주제</b> ' + pairs(mb.topics) + "</div>" +
+            '<div class="asked"><b>자주 질의한 부서</b> ' + pairs(mb.depts) + "</div>" : "") +
+          (mb.pre ? '<div class="asked"><b>올해 회의</b> 질의 ' + mb.pre + "회 · " + pairs(mb.preDepts) + "</div>" : "") +
+          (mb.speeches.length ? '<details class="examples"><summary>5분 자유발언·시정질문 ' + mb.speeches.length + "건</summary>" + mb.speeches.map(function (sp) {
+            return '<div class="ex">' + esc(sp.excerpt || sp.title) + '<div class="meta"><span>' + (sp.kind === "free" ? "5분 자유발언" : "시정질문") + " · " + esc(sp.date) + "</span>" +
+              '<a href="' + SITE + "/viewer/minutes.do?uid=" + sp.uid + "&mem_sch=" + pm.code + "&con_idx_sch=" + sp.idx + '" target="_blank" rel="noopener">원문</a></div></div>';
+          }).join("") + "</details>" : "") +
+          (mb.bills.length ? '<details class="examples"><summary>대표발의 의안 ' + mb.bills.length + "건</summary>" + mb.bills.map(function (bl) {
+            return '<div class="ex">' + esc(bl.title) + '<div class="meta"><span>' + esc(bl.date) + '</span><a href="' + SITE + "/kr/billview.do?uid=" + bl.uid + '" target="_blank" rel="noopener">의안 보기</a></div></div>';
+          }).join("") + "</details>" : "") + '<div class="meta"></div></div>';
+      });
+    } else if (state.tab === "pre") {
+      var preRows = pre.filter(function (r) { return pass(r, r.t.b.map(function (b) { return b[2]; }).join("\n")); });
+      total = preRows.length;
+      body = '<p class="hint">올해 행감 전에 열린 회의(업무보고, 추경·결산 심사 등)에서 우리 부서가 받은 질의입니다. 직전 회의의 질의는 행감에서 다시 나오는 경우가 많습니다.</p>';
+      preRows.slice(0, state.limit).forEach(function (r) { body += threadHtml(r, false); shown++; });
     } else if (state.tab === "finding") {
       var fs = findings.filter(function (f) {
         return (!state.year || String(f.y) === state.year) && (!state.kind || f.k === state.kind) &&
@@ -566,6 +628,10 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       return;
     }
     if (el.hasAttribute("data-tab")) { state.tab = el.getAttribute("data-tab"); state.limit = 30; render(); return; }
+    if (el.hasAttribute("data-premember")) {
+      state.member = el.getAttribute("data-premember"); state.tab = "pre"; state.limit = 30; render();
+      out.querySelector(".tabs").scrollIntoView({ behavior: "smooth" }); return;
+    }
     if (el.hasAttribute("data-member")) {
       state.member = el.getAttribute("data-member"); state.tab = "all"; state.limit = 30; render();
       out.querySelector(".tabs").scrollIntoView({ behavior: "smooth" }); return;
@@ -590,6 +656,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
   out.addEventListener("change", function (e) {
     if (saveField(e.target)) return;
     if (e.target.id === "fyear") { state.year = e.target.value; state.limit = 30; render(); }
+    if (e.target.id === "fcommittee") { state.committee = e.target.value; render(); }
     if (e.target.id === "fkind") { state.kind = e.target.value; state.limit = 30; render(); }
     if (e.target.id === "fmember") { state.member = e.target.value; state.limit = 30; render(); }
   });

@@ -276,11 +276,74 @@ def findings_of(report, folder):
     return out
 
 
+def plan_keys(cell):
+    """감사 일정 칸(○ 국 ⦁과 ⦁과 …)에서 부서 열쇠를 뽑는다."""
+    text = re.sub(r"및\s*읍[·ㆍ‧․]면[·ㆍ‧․]동|및\s*읍[·ㆍ‧․]면|및\s*동(?![가-힣])", "", cell)
+    keys = []
+    for unit in re.split(r"[○◦◯]", text):
+        parts = [re.sub(r"\(.*?\)|\s", "", x) for x in re.split(r"[⦁•∙▪\-]|\n(?=\s*[가-힣(])", unit)]
+        parts = [x for x in parts if len(x) >= 2]
+        if not parts:
+            continue
+        parent = parts[0]
+        for i, part in enumerate(parts):
+            keys += report_depts(part)
+            if i:  # 구청·보건소 소속 과는 앞에 기관명을 붙인 이름으로도 찾는다
+                keys += report_depts(parent + part)
+    return sorted(set(keys))
+
+
+def plan_of(report, folder, name_to_code):
+    """감사 계획서에서 감사위원 명단과 날짜별 감사 대상을 읽는다."""
+    committee = next((c for c in COMMITTEE_NAMES if c in report["file"]), "")
+    out = {"name": committee, "year": report["year"], "viewer": report["viewer"], "post": report["post"],
+           "members": [], "days": []}
+    for n in range(1, int((folder / "done").read_text()) + 1):
+        doc = (folder / f"{n}.html").read_text(encoding="utf-8")
+        flat = re.sub(r"\s", "", clean(re.sub(r"(?is)<table\b.*?</table>", "", doc)))
+        if "감사반편성" in flat and not out["members"]:
+            for role, rx in (("위원장", r"○위원장:([가-힣]{2,4})"), ("간사", r"○간사:([가-힣]{2,4})"),
+                             ("위원", r"○위원:([가-힣,]+)")):
+                found = re.search(rx, flat)
+                for name in (found.group(1).split(",") if found else []):
+                    if name:
+                        out["members"].append({"name": name, "role": role, "code": name_to_code.get(name, "")})
+        for grid in grid_tables(doc):
+            head = [re.sub(r"\s", "", h) for h in grid[0]] if grid else []
+            if out["days"] or len(head) < 3 or "일자" not in head[0] or "위원회" not in head[1]:
+                continue
+            for row in grid[1:]:
+                day = re.search(r"제\s*\d+\s*일차", row[0])
+                when = re.search(r"\d+월\s*\d+일\([가-힣]\)", row[0])
+                target = "\n".join(dict.fromkeys(c for c in row[1:-1] if c.strip() and "회의실" not in re.sub(r"\s", "", c)))
+                if not when or not target:
+                    continue
+                out["days"].append({"day": re.sub(r"\s", "", day.group(0)) if day else "", "date": when.group(0),
+                                    "text": re.sub(r"[ \t]+", " ", target), "keys": plan_keys(target)})
+    return out
+
+
+GREETING = re.compile(r"존경하는|안녕하십니까|의원입니다|감사드립니다|감사의 말씀|발언 기회|발언을 시작")
+
+
+def excerpt(text, limit=220):
+    """5분 자유발언의 인사말을 건너뛰고 본론 앞부분을 뽑는다."""
+    body = [s for i, s in enumerate(sentences(text)) if not (i < 8 and GREETING.search(s))]
+    out = ""
+    for sent in body:
+        if len(out) + len(sent) > limit and out:
+            break
+        out += (" " if out else "") + sent
+    return out[:limit + 80]
+
+
 def build_findings(depts):
     path = CACHE / "reports.json"
     findings = []
     if path.exists():
         for report in json.loads(path.read_text(encoding="utf-8")):
+            if report.get("kind", "result") != "result":
+                continue
             folder = CACHE / "reports" / str(report["viewer"])
             if (folder / "done").exists():
                 findings += findings_of(report, folder)
@@ -300,7 +363,13 @@ def main():
     for old in (DATA / "m").glob("*.js"):
         old.unlink()
 
-    depts = defaultdict(lambda: {"n": 0, "years": defaultdict(int), "uids": []})
+    depts = defaultdict(lambda: {"n": 0, "years": defaultdict(int), "uids": [], "pre": [], "pn": 0})
+    extras = json.loads((CACHE / "extras.json").read_text(encoding="utf-8")) if (CACHE / "extras.json").exists() \
+        else {"speeches": [], "bills": []}
+    speech_at = {(sp["uid"], sp["idx"]): sp for sp in extras["speeches"]}
+    profile = defaultdict(lambda: {"name": "", "audit": defaultdict(int), "topics": defaultdict(int),
+                                   "depts": defaultdict(int), "pre": 0, "preDepts": defaultdict(int),
+                                   "speeches": [], "bills": []})
     meetings = []
     topic_stat = [{"n": 0, "depts": set(), "cand": []} for _ in TOPICS]
     lengths = []
@@ -308,13 +377,41 @@ def main():
         path = CACHE / "minutes" / f"{m['uid']}.html"
         if not path.exists():
             continue
-        threads = threads_of(parse(path.read_text(encoding="utf-8")))
+        blocks = parse(path.read_text(encoding="utf-8"))
+        threads = threads_of(blocks)
         year = int(m["date"][:4])
-        m = dict(m, year=year, threads=len(threads))
+        audit = m.get("audit", True)
+        m = dict(m, year=year, threads=len(threads), audit=audit)
+        for b in blocks:  # 5분 자유발언·시정질문의 본문 앞부분
+            sp = speech_at.get((m["uid"], b["idx"]))
+            if sp and b["code"]:
+                sp["excerpt"] = excerpt(b["text"])
+                sp["member"] = sp["member"] or b["code"]
         meetings.append(m)
         if not threads:
             continue
         for t in threads:
+            if t["m"] and t["k"] == "qa":
+                pf = profile[t["m"]]
+                pf["name"] = t["n"]
+                if audit:
+                    pf["audit"][year] += 1
+                    for i in t["tp"]:
+                        pf["topics"][TOPICS[i][0]] += 1
+                    for d in t["d"]:
+                        pf["depts"][d] += 1
+                else:
+                    pf["pre"] += 1
+                    for d in t["d"]:
+                        pf["preDepts"][d] += 1
+            if not audit:  # 일반 회의는 '올해 질의'로만 쓴다
+                for d in t["d"]:
+                    e = depts[d]
+                    if t["k"] != "report":
+                        e["pn"] += 1
+                    if m["uid"] not in e["pre"]:
+                        e["pre"].append(m["uid"])
+                continue
             if t["k"] == "qa":
                 lengths.append(len(t["b"]))
                 for i in t["tp"]:
@@ -340,6 +437,40 @@ def main():
         (DATA / "m" / f"{m['uid']}.js").write_text(
             f"COUNCIL_MEETING({m['uid']},{body});\n", encoding="utf-8")
 
+    current = meta.get("current_members", {})
+    name_to_code = {v: k for k, v in current.items()}
+    for sp in extras["speeches"]:
+        if sp.get("member"):
+            profile[sp["member"]]["speeches"].append(
+                {k: sp.get(k, "") for k in ("kind", "uid", "idx", "date", "title", "excerpt")})
+    for bill in extras["bills"]:
+        code = name_to_code.get(re.sub(r"\s*의원.*$", "", bill["lead"]).strip())
+        if code:
+            profile[code]["bills"].append({"uid": bill["uid"], "title": bill["title"], "date": bill["date"]})
+    plans = []
+    reports_path = CACHE / "reports.json"
+    for report in (json.loads(reports_path.read_text(encoding="utf-8")) if reports_path.exists() else []):
+        folder = CACHE / "reports" / str(report["viewer"])
+        if report.get("kind") == "plan" and (folder / "done").exists():
+            plans.append(plan_of(report, folder, name_to_code))
+    top = lambda counts, n: sorted(counts.items(), key=lambda kv: -kv[1])[:n]
+    members = {}
+    for code, pf in profile.items():
+        if code not in current:
+            continue
+        members[code] = {
+            "name": current[code], "audit": dict(pf["audit"]), "topics": top(pf["topics"], 5),
+            "depts": top(pf["depts"], 6), "pre": pf["pre"], "preDepts": top(pf["preDepts"], 6),
+            "speeches": sorted(pf["speeches"], key=lambda x: x["date"], reverse=True),
+            "bills": sorted(pf["bills"], key=lambda x: x["date"], reverse=True),
+        }
+    for code, name in current.items():
+        members.setdefault(code, {"name": name, "audit": {}, "topics": [], "depts": [], "pre": 0,
+                                  "preDepts": [], "speeches": [], "bills": []})
+    (DATA / "members.js").write_text(
+        "window.COUNCIL_MEMBERS=" + json.dumps({"members": members, "plans": plans},
+                                               ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
+    print(f"의원 프로필 {len(members)}명, 감사 계획 {len(plans)}개 위원회")
     index = {
         "generated": date.today().isoformat(),
         "meetings": meetings,
@@ -350,11 +481,11 @@ def main():
         "window.COUNCIL_INDEX=" + json.dumps(index, ensure_ascii=False, separators=(",", ":")) + ";\n",
         encoding="utf-8")
     # 주제별로 다른 부서가 실제 받은 질문 예시를 고른다(최근 연도, 부서·의원이 겹치지 않게).
-    current = set(meta.get("current_members", {}))
+    current_codes = set(meta.get("current_members", {}))
     topics = []
     for (name, _, prep), st in zip(TOPICS, topic_stat):
         picked, seen_d, seen_m = [], set(), defaultdict(int)
-        for c in sorted(st["cand"], key=lambda c: (-c["y"], c["m"] not in current, -len(c["s"]))):
+        for c in sorted(st["cand"], key=lambda c: (-c["y"], c["m"] not in current_codes, -len(c["s"]))):
             if c["d"] in seen_d or seen_m[c["m"]] >= 2:
                 continue
             seen_d.add(c["d"])
