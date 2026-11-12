@@ -223,7 +223,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"error": "요청 형식이 올바르지 않습니다."}, 400)
         if path == "/api/docs/search":
             index, q = loaded(materials(cfg)), str(body.get("q") or "")
-            return self.send_json({"results": index.search(q, int(body.get("k") or 5), qvec=question_vector(cfg, index, q))})
+            skip = [str(x) for x in body.get("exclude") or []]
+            return self.send_json({"results": index.search(q, int(body.get("k") or 5), qvec=question_vector(cfg, index, q), exclude=skip)})
         if path == "/api/docs/refine":
             # 화면에서 AI를 켠 경우에만 호출된다. ① 질문으로 검색어를 넓히고 ② 넓게 찾은 후보를 재정렬 모델로 다시 고른다.
             if not cfg["api_key"]:
@@ -238,7 +239,8 @@ class Handler(SimpleHTTPRequestHandler):
                     terms = [t.strip(" .·-\"'") for t in re.split(r"[,\n]", text) if 1 < len(t.strip()) <= 20][:10]
                 except (ValueError, KeyError, IndexError, TypeError):
                     note = f"검색어 넓히기 실패(응답 코드 {status})"
-            found = index.search(q, int(cfg["rerank_candidates"]), extra=terms, cutoff=0, qvec=question_vector(cfg, index, q))
+            found = index.search(q, int(cfg["rerank_candidates"]), extra=terms, cutoff=0, qvec=question_vector(cfg, index, q),
+                                 exclude=[str(x) for x in body.get("exclude") or []])
             if len(found) > 1:
                 texts = [(c["file"].rsplit("/", 1)[-1] + " | " + (c["title"] + " | " if c["title"] and c["title"] not in c["text"] else "") + c["text"])[:1500] for c in found]
                 status, raw = call_api(cfg, cfg["rerank_path"], {"model": cfg["rerank_model"], "query": q, "documents": texts, "top_n": 5})

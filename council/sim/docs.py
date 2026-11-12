@@ -253,7 +253,24 @@ ASK_WORDS = re.compile(
     r"얼마나|얼마|어떻게|어느 ?정도|무엇|무슨|어떤|언제|어디|왜|몇|"
     r"됩니까|입니까|습니까|합니까|십니까|나요|인가요|는지요|인지요|지요|"
     r"말씀해 ?주\S*|답변해 ?주\S*|설명해 ?주\S*|알려 ?주\S*|주시기 ?바랍니다|주십시오|주세요|"
-    r"과장님|국장님|소장님|팀장님|위원장님|그러면|그런데|그래서|혹시|지금|현재|관련해서|대해서|대하여|있는지|되는지|하는지")
+    r"과장님|국장님|소장님|팀장님|위원장님|그러면|그런데|그래서|혹시|지금|현재|관련해서|대해서|대하여|있는지|되는지|하는지|"
+    r"관해서?|관하여|관한|대한|대해|관련|질문|생각\S*|말씀\S*|의견|입장|설명|답변")
+# 낱말 끝에 붙은 조사와 '~하다' 꼴 어미. 떼고 나서 줄기만 맞춰 본다.
+PARTICLE = re.compile(r"(으로서|으로써|에서는|에서도|에서|에게|으로|까지|부터|이나|이란|이라는|처럼|마다|은|는|이|가|을|를|의|에|도|과|와|로|만)$")
+VERB_TAIL = re.compile(r"^(.{2,}?)(하[가-힣]*|되[가-힣]*|했[가-힣]*|됐[가-힣]*)$")
+
+
+def stems(core):
+    """질문에서 내용 낱말의 줄기를 순서대로 뽑는다. 예) '플랫폼 예산은' → ['플랫폼', '예산']"""
+    out = []
+    for word in re.findall(r"[가-힣A-Za-z0-9]{2,}", core):
+        if re.match(r"[가-힣]", word):
+            word = PARTICLE.sub("", word) if len(PARTICLE.sub("", word)) >= 2 else word
+            m = VERB_TAIL.match(word)
+            word = m.group(1) if m else word
+        if len(word) >= 2 and word not in out:
+            out.append(word)
+    return out[-6:]
 # 같은 뜻으로 섞여 쓰이는 낱말. 질문에 하나가 나오면 나머지도 함께 찾는다.
 SYNONYMS = [
     ("사용자", "이용자", "가입자", "사용 인원", "이용 인원", "접속자", "계정"),
@@ -266,6 +283,7 @@ SYNONYMS = [
     ("민원", "불편", "건의"),
     ("교육", "연수", "수료"),
     ("계획", "방안", "대책"),
+    ("잔여", "잔액", "남은", "남았", "잔량"),
 ]
 WANTS_NUMBER = re.compile(r"얼마|몇|수는|수가|현황|규모|비율|률|금액|예산|건수|인원|통계|실적")
 LOOKS_LIKE_QUESTION = re.compile(r"\?|십니까|습니까|입니까|주십시오|선택해 ?주")
@@ -291,14 +309,17 @@ class EmbedError(Exception):
         self.status = status
 
 
-def chunk_key(c):
-    return hashlib.sha1((c["title"] + "\n" + c["text"]).encode("utf-8")).hexdigest()[:20]
-
-
 def chunk_text(c):
+    """임베딩 모델에 보내는 글. 대목만 보내면 무슨 문서의 일부인지 모르므로 파일 이름과 문서 첫머리를 앞에 붙인다."""
     name = c["file"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    doc = c.get("doc", "")
     head = c["title"] if c["title"] and c["title"] not in c["text"] else ""
-    return (name + "\n" + (head + "\n" if head else "") + c["text"])[:1500]
+    lines = [name] + ([doc] if doc and doc not in c["text"] else []) + ([head] if head else []) + [c["text"]]
+    return "\n".join(lines)[:1500]
+
+
+def chunk_key(c):
+    return hashlib.sha1(chunk_text(c).encode("utf-8")).hexdigest()[:20]
 
 
 def unit(vec):
@@ -375,6 +396,7 @@ class Index:
         self.chunks, self.files = [], []
         self.posting, self.lengths, self.average = {}, [], 1.0
         self.asking, self.figures, self.same = [], [], []     # 대목별: 질문 모양인지, 수치가 몇 개인지, 같은 내용 묶음
+        self.file_of, self.file_size, self.group_of, self.groups = [], [], [], []   # 대목이 든 파일, 파일별 대목 수, 폴더 묶음
         self.loading, self.progress, self.seconds = False, {"done": 0, "total": 0, "current": ""}, 0.0
         self.vectors = Vectors(self.cache_dir, embed_model) if self.cache_dir and embed_model else None
         self.rows = []                                   # (대목 번호, 벡터 줄 번호): 벡터가 있는 대목만
@@ -481,6 +503,11 @@ class Index:
                 chunks += results[name]
             elif name in notes:
                 files.append({"name": name, "chunks": 0, "error": notes[name]})
+        first = {}                                   # 파일별 문서 첫머리(제목 줄)
+        for c in chunks:
+            if c["file"] not in first:
+                first[c["file"]] = squeeze((c["text"].splitlines() or [""])[0])[:70]
+            c["doc"] = first[c["file"]]
         posting, lengths, asking, figures, same = defaultdict(list), [], [], [], []
         for i, c in enumerate(chunks):
             name = c["file"].rsplit("/", 1)[-1].rsplit(".", 1)[0]          # 파일 이름도 찾는 대상에 넣는다
@@ -496,6 +523,21 @@ class Index:
             self.chunks, self.files = chunks, files
             self.posting, self.lengths = dict(posting), lengths
             self.asking, self.figures, self.same = asking, figures, same
+            # 대목이 어느 파일·어느 폴더에 들었는지. 폴더 묶음은 모든 파일이 함께 쓰는 윗폴더를 뗀 첫 폴더 이름이다.
+            names = sorted({c["file"] for c in chunks})
+            number = {n: i for i, n in enumerate(names)}
+            parts = [n.split("/")[:-1] for n in names]
+            skip = 0
+            while parts and all(len(p) > skip for p in parts) and len({p[skip] for p in parts}) == 1:
+                skip += 1
+            label = {n: (p[skip] if len(p) > skip else "(폴더 없음)") for n, p in zip(names, parts)}
+            self.file_of = [number[c["file"]] for c in chunks]
+            self.file_size = [0] * len(names)
+            for f in self.file_of:
+                self.file_size[f] += 1
+            self.group_of = [label[c["file"]] for c in chunks]
+            counts = Counter(self.group_of)
+            self.groups = [{"name": g, "chunks": n} for g, n in sorted(counts.items())]
             self._align()
             self.average = (sum(lengths) / len(lengths)) if lengths else 1.0
             self.loading, self.seconds = False, round(time.time() - began, 1)
@@ -585,18 +627,39 @@ class Index:
     def status(self):
         with self.lock:
             return {"folder": str(self.folder), "exists": self.folder.is_dir(), "files": self.files, "chunks": len(self.chunks),
-                    "loading": self.loading, "progress": dict(self.progress), "seconds": self.seconds,
+                    "loading": self.loading, "progress": dict(self.progress), "seconds": self.seconds, "groups": self.groups,
                     "embed": dict(self.embedding, model=self.vectors.model if self.vectors else "", have=len(self.rows),
                                   dim=self.vectors.dim if self.vectors else 0)}
 
-    def search(self, query, k=5, extra=(), cutoff=0.3, qvec=None):
+    def _having(self, word):
+        """낱말(또는 같은 뜻의 낱말)이 들어 있는 대목 번호 모음."""
+        found = set()
+        flat = re.sub(r"\s", "", word)
+        variants = {word}
+        for group in SYNONYMS:
+            if any(re.sub(r"\s", "", w) == flat for w in group):
+                variants.update(group)
+        for v in variants:
+            pieces = set(grams(v))
+            hit = None
+            for g in pieces:
+                ids = {i for i, _ in self.posting.get(g, ())}
+                hit = ids if hit is None else hit & ids
+                if not hit:
+                    break
+            found |= hit or set()
+        return found
+
+    def search(self, query, k=5, extra=(), cutoff=0.3, qvec=None, exclude=()):
         """질문에 답이 될 만한 대목을 돌려준다.
 
-        질문의 말투는 떼고 내용 낱말만으로 찾되, 같은 뜻의 낱말도 함께 찾는다. 물음만 있는 대목(설문 문항 등)은
-        뒤로 보내고, 수치를 묻는 질문이면 수치가 든 대목을 앞세운다. 내용이 같은 대목은 하나만 남긴다.
-        extra에는 추가로 찾을 낱말(예: AI가 넓혀 준 검색어)을 넣는다.
-        cutoff는 1위 점수의 이 비율에 못 미치는 대목을 버리는 기준이다(재정렬용 후보를 넓게 뽑을 때는 0).
-        qvec(질문의 벡터)을 주면 뜻이 가까운 대목도 함께 찾아, 낱말 순위와 뜻 순위를 합쳐 줄을 세운다.
+        - 질문의 말투는 떼고 내용 낱말만으로 찾되, 같은 뜻의 낱말도 함께 찾는다.
+        - 대목이 든 문서도 본다. '플랫폼 예산'을 물으면, 대목에는 '예산'만 있어도 그 문서가 플랫폼을 다루는
+          문서이면 플랫폼도 맞은 것으로 쳐 준다. 반대로 질문의 마지막 낱말(묻는 대상)이 대목에 없으면 뒤로 보낸다.
+        - 물음만 있는 대목(설문 문항 등)은 뒤로, 수치를 묻는 질문이면 수치가 든 대목을 앞으로 보낸다.
+        - 내용이 같은 대목은 하나만 남긴다.
+        extra: 추가로 찾을 낱말(예: AI가 넓혀 준 검색어). cutoff: 1위 점수의 이 비율에 못 미치면 버린다(0이면 안 버림).
+        qvec: 질문의 벡터. 주면 뜻이 가까운 대목도 함께 찾아 합친다. exclude: 찾지 않을 폴더 묶음 이름.
         """
         query = squeeze(query)
         core = squeeze(ASK_WORDS.sub(" ", query)) or query
@@ -615,32 +678,58 @@ class Index:
             for g in grams(str(term)):
                 weights[g] = max(weights[g], 0.8)
         wants_number = bool(WANTS_NUMBER.search(query))
+        words = stems(core)
+        skip = set(exclude)
         with self.lock:
             total, scores = len(self.chunks), defaultdict(float)
+            idf = {}
             for g, w in weights.items():
                 hits = self.posting.get(g)
                 if not hits:
                     continue
-                idf = math.log(1 + (total - len(hits) + 0.5) / (len(hits) + 0.5))
+                idf[g] = math.log(1 + (total - len(hits) + 0.5) / (len(hits) + 0.5))
                 for i, n in hits:
-                    scores[i] += w * idf * n * 2.2 / (n + 1.2 * (0.25 + 0.75 * self.lengths[i] / self.average))
+                    scores[i] += w * idf[g] * n * 2.2 / (n + 1.2 * (0.25 + 0.75 * self.lengths[i] / self.average))
+            if skip:
+                scores = defaultdict(float, {i: sc for i, sc in scores.items() if self.group_of[i] not in skip})
+            # 문서 맥락: 낱말이 대목에는 없어도 그 문서 곳곳에 나오면(문서의 3% 이상, 2곳 이상) 일부 맞은 것으로 친다.
+            if len(words) > 1 and scores:
+                having = {w: self._having(w) for w in words}
+                per_file = {}
+                for w, ids in having.items():
+                    count = Counter(self.file_of[i] for i in ids)
+                    per_file[w] = {f: min(0.8, 5.0 * n / self.file_size[f]) for f, n in count.items()
+                                   if n >= 2 and n / self.file_size[f] >= 0.03}
+                worth = {w: sum(weights[g] * idf.get(g, 0.0) for g in set(grams(w))) for w in words}
+                target, whole = words[-1], sum(worth.values()) or 1.0
+                for i in scores:
+                    f, covered = self.file_of[i], 0.0
+                    for w in words:
+                        credit = 1.0 if i in having[w] else per_file[w].get(f, 0.0)
+                        covered += credit * worth[w]
+                        if i not in having[w]:
+                            scores[i] += credit * worth[w]
+                    # 질문의 낱말 가운데 대목에도 문서에도 없는 것이 많을수록 뒤로 보낸다(드문 낱말일수록 크게).
+                    scores[i] *= 0.35 + 0.65 * covered / whole
+                    if having[target] and i not in having[target]:
+                        scores[i] *= 0.45                 # 묻는 대상이 대목에 없으면 답일 가능성이 낮다
             via = {}
             if qvec and self.rows:
-                # 낱말 점수와 뜻 점수를 각각 0~1로 맞춘 뒤 반반씩 더한다. 한쪽에서만 높아도 올라오고,
+                # 낱말 점수와 뜻 점수를 각각 0~1로 맞춘 뒤 6:4로 더한다. 한쪽에서만 높아도 올라오고,
                 # 둘 다 높으면 더 올라온다. (등수만 쓰면 점수 차이가 사라져 뚜렷한 1위가 묻힌다.)
                 near = self.vectors.nearest(qvec, self.rows, 150)
                 words = sorted(scores.items(), key=lambda kv: -kv[1])[:150]
                 fused = defaultdict(float)
                 best = words[0][1] if words else 1.0
                 for i, sc in words:
-                    fused[i] += 0.5 * sc / best
+                    fused[i] += 0.6 * sc / best
                     via[i] = "낱말"
                 if near:
                     high, low = near[0][1], near[-1][1]
                     span = (high - low) or 1.0
                     for i, sim in near:
-                        part = 0.5 * (sim - low) / span
-                        if part > 0.2:
+                        part = 0.4 * (sim - low) / span
+                        if part > 0.16:
                             via[i] = "낱말+뜻" if i in via else "뜻"
                         fused[i] += part
                 scores = fused

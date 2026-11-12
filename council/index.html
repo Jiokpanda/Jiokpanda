@@ -424,7 +424,8 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
 
   /* ---------- 답변 자료 찾기 ---------- */
   // 자료는 로컬 서버가 이 PC의 폴더에서 읽고, 찾기도 이 PC 안에서 한다. AI 요지는 켰을 때만 찾은 대목을 보낸다.
-  var mat = { status: null, loading: false, q: "", results: null, ai: store.get("docs:ai") === "1", answer: "", busy: false, error: "" };
+  var mat = { status: null, loading: false, q: "", results: null, ai: store.get("docs:ai") === "1", answer: "", busy: false, error: "",
+    off: (store.get("docs:off") || "").split("\n").filter(Boolean) };   // 찾지 않기로 한 폴더
   function matStatus(reload) {
     mat.loading = true;
     fetch(reload ? "/api/docs/reload" : "/api/docs/status", { method: reload ? "POST" : "GET" }).then(function (r) { return r.json(); })
@@ -452,12 +453,12 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
       (em.error ? " · 마지막 오류: " + em.error : "");
   }
   function matSearch(q, done) {
-    fetch("/api/docs/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: q, k: 5 }) })
+    fetch("/api/docs/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: q, k: 5, exclude: mat.off }) })
       .then(function (r) { return r.json(); }).then(function (j) { done(j.results || []); }).catch(function () { done([]); });
   }
   // AI를 켠 경우: 검색어를 넓혀 후보를 많이 찾은 뒤 재정렬 모델로 다시 고른다(로컬 서버가 처리).
   function matRefine(q, done) {
-    fetch("/api/docs/refine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: q }) })
+    fetch("/api/docs/refine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: q, exclude: mat.off }) })
       .then(function (r) { return r.json(); }).then(function (j) { done(j); }).catch(function (e) { done({ error: String(e) }); });
   }
   function matAnswer(q, results, done) {
@@ -856,6 +857,10 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
         if (ms.files.length) body += '<details class="examples"><summary>파일 목록</summary>' + ms.files.map(function (f) {
           return '<div class="ex">' + esc(f.name) + '<div class="meta"><span' + (f.error ? ' class="warn"' : "") + ">" + (f.error ? esc(f.error) : "대목 " + f.chunks + "개") + "</span></div></div>";
         }).join("") + "</details>";
+        if ((ms.groups || []).length > 1) body += '<div class="filters"><span class="count">찾을 폴더</span>' + ms.groups.map(function (g) {
+          return '<label class="check"><input type="checkbox" data-group="' + esc(g.name) + '"' + (mat.off.indexOf(g.name) < 0 ? " checked" : "") + "> " +
+            esc(g.name) + ' <span class="count">' + g.chunks + "</span></label>";
+        }).join("") + "</div>";
         body += '<div class="cform wide"><textarea id="docq" rows="2" placeholder="질문을 입력하세요 (예: 희망도서 중복 구입이 올해는 몇 건입니까)" aria-label="질문">' + esc(mat.q) + "</textarea></div>" +
           '<div class="filters"><button class="printbtn primary" type="button" id="docsearch"' + (ms.chunks ? "" : " disabled") + ">찾기</button>" +
           '<label class="check"><input type="checkbox" id="docai"' + (mat.ai ? " checked" : "") + "> AI로 다시 고르고 요지 만들기 (질문과 후보 대목 최대 40개가 팩트챗으로 전송됩니다)</label></div>";
@@ -1202,6 +1207,13 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
   out.addEventListener("change", function (e) {
     if (saveField(e.target)) return;
     if (e.target.id === "fyear") { state.year = e.target.value; state.limit = 30; render(); }
+    if (e.target.hasAttribute("data-group")) {
+      var gname = e.target.getAttribute("data-group");
+      mat.off = mat.off.filter(function (x) { return x !== gname; });
+      if (!e.target.checked) mat.off.push(gname);
+      store.set("docs:off", mat.off.join("\n"));
+      return;
+    }
     if (e.target.id === "docai") { mat.ai = e.target.checked; store.set("docs:ai", mat.ai ? "1" : ""); return; }
     if (e.target.id === "livechannel") { live.url = e.target.value; return; }
     if (e.target.id === "liveassist") { live.assist = e.target.checked; store.set("live:assist", live.assist ? "" : "0"); return; }
