@@ -8,10 +8,14 @@
 - 구형 HWP는 읽지 못한다. 한글에서 HWPX로 다시 저장해야 한다.
 """
 import csv
+import hashlib
 import io
+import json
 import math
+import os
 import re
 import threading
+import time
 import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -185,7 +189,11 @@ def read_csv(path, source):
             continue
     else:
         text = raw.decode("utf-8", "replace")
-    rows = list(csv.reader(io.StringIO(text)))[:MAX_ROWS]
+    rows = []
+    for row in csv.reader(io.StringIO(text)):
+        rows.append(row)
+        if len(rows) >= MAX_ROWS:
+            break
     return table_chunks(rows, source, lambda n: f"{n}행")
 
 
@@ -198,21 +206,40 @@ def read_text(path, source):
     return group(text.splitlines(), source, lambda a, b: f"{a}번째 줄")
 
 
-def read_pdf(path, source):
+PDF_PAGES_PER_TASK = 25    # PDF는 쪽 읽기가 느려서 이만큼씩 나눠 여러 코어에서 읽는다
+
+
+def pdf_pages(path):
     try:
         from pypdf import PdfReader
     except ImportError:
         raise RuntimeError("PDF를 읽으려면 pypdf가 필요합니다 (pip install pypdf)")
+    return len(PdfReader(str(path)).pages)
+
+
+def read_pdf(path, source, first=0, last=None):
+    from pypdf import PdfReader
+    pages = PdfReader(str(path)).pages
     out = []
-    for n, page in enumerate(PdfReader(str(path)).pages, 1):
-        lines = (page.extract_text() or "").splitlines()
-        out += group(lines, source, lambda a, b, p=n: f"{p}쪽")
-    if not out:
-        raise RuntimeError("글자를 찾지 못했습니다(스캔한 문서일 수 있습니다)")
+    for n in range(first, len(pages) if last is None else min(last, len(pages))):
+        lines = (pages[n].extract_text() or "").splitlines()
+        out += group(lines, source, lambda a, b, p=n + 1: f"{p}쪽")
     return out
 
 
-READERS = {".hwpx": read_hwpx, ".xlsx": read_xlsx, ".csv": read_csv, ".txt": read_text, ".md": read_text, ".pdf": read_pdf}
+def run_task(task):
+    """파일 하나(또는 PDF의 쪽 범위 하나)를 읽는다. 다른 프로세스에서도 불리므로 모듈 맨 위에 둔다."""
+    path, source, first, last = task
+    try:
+        if first is None:
+            return task, READERS[Path(path).suffix.lower()](path, source), ""
+        return task, read_pdf(path, source, first, last), ""
+    except Exception as e:                     # 한 파일이 깨져도 나머지는 읽는다
+        return task, [], str(e)[:200]
+
+
+READERS = {".hwpx": read_hwpx, ".xlsx": read_xlsx, ".csv": read_csv, ".txt": read_text, ".md": read_text,
+           ".pdf": lambda path, source: read_pdf(path, source)}
 NOTES = {".hwp": "구형 HWP는 읽지 못합니다. 한글에서 HWPX로 다시 저장해 주세요.",
          ".xls": "구형 XLS는 읽지 못합니다. XLSX나 CSV로 다시 저장해 주세요.",
          ".docx": "DOCX는 아직 읽지 못합니다. PDF나 글 파일로 저장해 주세요."}
@@ -232,28 +259,114 @@ def grams(text):
 
 
 class Index:
-    def __init__(self, folder):
+    def __init__(self, folder, cache_dir=None):
         self.folder = Path(folder)
+        self.cache_dir = Path(cache_dir) if cache_dir else None
         self.lock = threading.Lock()
         self.chunks, self.files = [], []
         self.posting, self.lengths, self.average = {}, [], 1.0
+        self.loading, self.progress, self.seconds = False, {"done": 0, "total": 0, "current": ""}, 0.0
+
+    def start(self):
+        """뒤에서 읽기 시작한다. 읽는 동안에도 상태 조회와 (이전 색인으로) 찾기는 된다."""
+        with self.lock:
+            if self.loading:
+                return
+            self.loading = True
+            self.progress = {"done": 0, "total": 0, "current": ""}
+        threading.Thread(target=self.load, daemon=True).start()
+
+    def _cache_path(self, path):
+        if not self.cache_dir:
+            return None
+        st = path.stat()
+        key = f"v1|{path}|{st.st_mtime_ns}|{st.st_size}"
+        return self.cache_dir / (hashlib.sha1(key.encode("utf-8")).hexdigest() + ".json")
 
     def load(self):
-        chunks, files = [], []
+        began = time.time()
+        with self.lock:
+            self.loading = True
         paths = sorted(p for p in self.folder.rglob("*") if p.is_file() and not p.name.startswith(("~", "."))) \
             if self.folder.is_dir() else []
+        if self.cache_dir:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        results, notes, tasks, parts = {}, {}, [], {}
         for path in paths:
             name = str(path.relative_to(self.folder)).replace("\\", "/")
             ext = path.suffix.lower()
-            if ext in READERS:
+            if ext in NOTES:
+                notes[name] = NOTES[ext]
+                continue
+            if ext not in READERS:
+                continue
+            cached = self._cache_path(path)
+            if cached and cached.exists():                    # 바뀌지 않은 파일은 지난번에 읽은 것을 쓴다
                 try:
-                    got = READERS[ext](path, name)
-                    files.append({"name": name, "chunks": len(got), "error": ""})
-                    chunks += got
-                except Exception as e:                 # 한 파일이 깨져도 나머지는 읽는다
-                    files.append({"name": name, "chunks": 0, "error": str(e)[:200]})
-            elif ext in NOTES:
-                files.append({"name": name, "chunks": 0, "error": NOTES[ext]})
+                    results[name] = json.loads(cached.read_text(encoding="utf-8"))
+                    continue
+                except (ValueError, OSError):
+                    pass
+            if ext == ".pdf":
+                try:
+                    count = pdf_pages(path)
+                except Exception as e:
+                    notes[name] = str(e)[:200]
+                    continue
+                ranges = [(i, min(i + PDF_PAGES_PER_TASK, count)) for i in range(0, count, PDF_PAGES_PER_TASK)]
+                parts[name] = {"path": path, "need": len(ranges), "got": {}, "error": ""}
+                tasks += [(str(path), name, a, b) for a, b in ranges]
+            else:
+                parts[name] = {"path": path, "need": 1, "got": {}, "error": ""}
+                tasks.append((str(path), name, None, None))
+
+        def finish(task, chunks, error):
+            name, first = task[1], task[2] or 0
+            part = parts[name]
+            part["got"][first] = chunks
+            part["error"] = part["error"] or error
+            with self.lock:
+                self.progress = {"done": self.progress["done"] + 1, "total": len(tasks), "current": name}
+            if len(part["got"]) == part["need"]:
+                merged = [c for k in sorted(part["got"]) for c in part["got"][k]]
+                if part["error"]:
+                    notes[name] = part["error"]
+                elif not merged and name.lower().endswith(".pdf"):
+                    notes[name] = "글자를 찾지 못했습니다(스캔한 문서일 수 있습니다)"
+                else:
+                    results[name] = merged
+                    cached = self._cache_path(part["path"])
+                    if cached:
+                        try:
+                            cached.write_text(json.dumps(merged, ensure_ascii=False), encoding="utf-8")
+                        except OSError:
+                            pass
+
+        with self.lock:
+            self.progress = {"done": 0, "total": len(tasks), "current": ""}
+        done = set()
+        if len(tasks) > 1 and (os.cpu_count() or 1) > 1:
+            try:                                              # 여러 코어로 나눠 읽는다. 안 되는 환경이면 하나씩 읽는다.
+                from concurrent.futures import ProcessPoolExecutor, as_completed
+                with ProcessPoolExecutor(max_workers=min(8, os.cpu_count() or 1)) as pool:
+                    for fut in as_completed([pool.submit(run_task, t) for t in tasks]):
+                        task, chunks, error = fut.result()
+                        finish(task, chunks, error)
+                        done.add(task)
+            except Exception:
+                pass
+        for task in tasks:
+            if task not in done:
+                finish(*run_task(task))
+
+        chunks, files = [], []
+        for path in paths:
+            name = str(path.relative_to(self.folder)).replace("\\", "/")
+            if name in results:
+                files.append({"name": name, "chunks": len(results[name]), "error": ""})
+                chunks += results[name]
+            elif name in notes:
+                files.append({"name": name, "chunks": 0, "error": notes[name]})
         posting, lengths = defaultdict(list), []
         for i, c in enumerate(chunks):
             counts = Counter(grams(c["title"] + " " + c["text"]))
@@ -264,11 +377,13 @@ class Index:
             self.chunks, self.files = chunks, files
             self.posting, self.lengths = dict(posting), lengths
             self.average = (sum(lengths) / len(lengths)) if lengths else 1.0
+            self.loading, self.seconds = False, round(time.time() - began, 1)
         return self.status()
 
     def status(self):
         with self.lock:
-            return {"folder": str(self.folder), "exists": self.folder.is_dir(), "files": self.files, "chunks": len(self.chunks)}
+            return {"folder": str(self.folder), "exists": self.folder.is_dir(), "files": self.files, "chunks": len(self.chunks),
+                    "loading": self.loading, "progress": dict(self.progress), "seconds": self.seconds}
 
     def search(self, query, k=5):
         """질문과 가장 관련 있는 대목을 돌려준다. 질문의 끝부분(실제 물음)에 무게를 더 둔다."""

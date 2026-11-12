@@ -429,7 +429,17 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
     mat.loading = true;
     fetch(reload ? "/api/docs/reload" : "/api/docs/status", { method: reload ? "POST" : "GET" }).then(function (r) { return r.json(); })
       .then(function (j) { mat.status = j; }).catch(function () { mat.status = { files: [], chunks: 0, exists: false, folder: "" }; })
-      .then(function () { mat.loading = false; if (state.tab === "docs" || state.tab === "live") render(); });
+      .then(function () {
+        mat.loading = !!mat.status.loading;
+        if (mat.loading) setTimeout(function () { matStatus(false); }, 1000);     // 다 읽을 때까지 1초마다 진행 상황을 묻는다
+        if (state.tab === "docs" && mat.loading && $("docprogress")) { $("docprogress").textContent = matProgress(); return; }
+        if (state.tab === "docs" || state.tab === "live") render();
+      });
+  }
+  function matProgress() {
+    var pr = (mat.status && mat.status.progress) || { done: 0, total: 0, current: "" };
+    if (!pr.total) return "자료 폴더의 파일을 확인하는 중입니다…";
+    return "자료를 읽는 중입니다 · " + pr.done + " / " + pr.total + (pr.current ? " · " + pr.current : "") + " (처음 한 번만 오래 걸리고, 다음부터는 바뀐 파일만 읽습니다)";
   }
   function matSearch(q, done) {
     fetch("/api/docs/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: q, k: 5 }) })
@@ -809,10 +819,11 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
       } else if (sim.ready) {
         if (!mat.status && !mat.loading) matStatus(false);
         var ms = mat.status || { files: [], chunks: 0, folder: "" };
+        if (mat.loading) body += '<p class="count" id="docprogress">' + esc(matProgress()) + "</p>";
         var bad = ms.files.filter(function (f) { return f.error; });
         body += '<div class="filters"><span class="count">자료 폴더 ' + esc(ms.folder) + " · 파일 " + (ms.files.length - bad.length) + "개 · 대목 " + ms.chunks + "개" +
-          (bad.length ? " · 읽지 못한 파일 " + bad.length + "개" : "") + '</span><button class="printbtn" type="button" id="docreload"' + (mat.loading ? " disabled" : "") + ">자료 다시 읽기</button></div>";
-        if (mat.status && !ms.chunks) body += '<div class="item"><div class="quote"><strong>자료 폴더가 비어 있습니다</strong></div>' +
+          (bad.length ? " · 읽지 못한 파일 " + bad.length + "개" : "") + (ms.seconds && !mat.loading ? " · 읽는 데 " + ms.seconds + "초" : "") + '</span><button class="printbtn" type="button" id="docreload"' + (mat.loading ? " disabled" : "") + ">자료 다시 읽기</button></div>";
+        if (mat.status && !ms.chunks && !mat.loading) body += '<div class="item"><div class="quote"><strong>자료 폴더가 비어 있습니다</strong></div>' +
           '<div class="asked">위 폴더에 HWPX, PDF, 엑셀(xlsx), CSV, 글 파일을 넣고 ‘자료 다시 읽기’를 누르세요. 하위 폴더도 함께 읽습니다.</div><div class="meta"></div></div>';
         if (ms.files.length) body += '<details class="examples"><summary>파일 목록</summary>' + ms.files.map(function (f) {
           return '<div class="ex">' + esc(f.name) + '<div class="meta"><span' + (f.error ? ' class="warn"' : "") + ">" + (f.error ? esc(f.error) : "대목 " + f.chunks + "개") + "</span></div></div>";

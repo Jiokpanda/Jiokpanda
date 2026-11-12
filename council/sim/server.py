@@ -49,8 +49,8 @@ def materials(cfg):
     folder = Path(cfg["materials_dir"])
     folder = folder if folder.is_absolute() else ROOT / folder
     if INDEX["docs"] is None or INDEX["docs"].folder != folder:
-        INDEX["docs"] = docs.Index(folder)
-        INDEX["docs"].load()
+        INDEX["docs"] = docs.Index(folder, cache_dir=ROOT / ".cache" / "materials")
+        INDEX["docs"].start()          # 뒤에서 읽는다. 화면은 진행 상황을 물어 가며 기다린다.
     return INDEX["docs"]
 
 
@@ -154,7 +154,9 @@ class Handler(SimpleHTTPRequestHandler):
                 SESSION["live"].stop()
             return self.send_json({"ok": True})
         if path == "/api/docs/reload":
-            return self.send_json(materials(cfg).load())
+            index = materials(cfg)
+            index.start()
+            return self.send_json(index.status())
         if path == "/api/live/audio":                      # 마이크 소리 조각(글자가 아니라 소리 그대로)
             length = int(self.headers.get("Content-Length") or 0)
             data = self.rfile.read(length) if 0 < length <= MAX_BODY else b""
