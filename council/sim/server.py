@@ -28,7 +28,7 @@ DEFAULTS = {
     "models_path": "/models",
     "api_key": "",
     "model": "",
-    "temperature": 0.7,
+    "temperature": None,   # 최신 모델 다수가 이 값을 받지 않으므로 기본은 보내지 않는다
     "port": 8765,
 }
 MAX_BODY = 400_000       # 화면에서 받는 요청 크기 한도(바이트)
@@ -117,8 +117,10 @@ class Handler(SimpleHTTPRequestHandler):
         cfg = load_config()
         if not cfg["api_key"] or not cfg["model"]:
             return self.send_json({"error": "sim/config.json 에 api_key 와 model 을 넣어 주세요."}, 400)
-        status, body = call_api(cfg, cfg["chat_path"], {
-            "model": cfg["model"], "messages": messages, "temperature": cfg["temperature"]})
+        payload = {"model": cfg["model"], "messages": messages}
+        if cfg["temperature"] is not None:
+            payload["temperature"] = cfg["temperature"]
+        status, body = call_api(cfg, cfg["chat_path"], payload)
         try:
             text = json.loads(body)["choices"][0]["message"]["content"]
         except (ValueError, KeyError, IndexError, TypeError):
