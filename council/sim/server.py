@@ -22,6 +22,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import docs  # noqa: E402  (같은 폴더의 답변 자료 찾기 모듈)
 import live  # noqa: E402  (같은 폴더의 생중계 받아쓰기 모듈)
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +32,7 @@ DEFAULTS = {
     "chat_path": "/chat/completions/",
     "models_path": "/models/?type=llm",
     "stt_path": "/soniox/transcribe-websocket",
+    "materials_dir": "materials",   # 답변 자료 폴더(council 폴더 기준 상대 경로 또는 전체 경로)
     "live_max_minutes": 240,   # 생중계 받아쓰기를 켜 둘 수 있는 최대 시간(크레딧 보호)
     "api_key": "",
     "model": "",
@@ -38,8 +40,18 @@ DEFAULTS = {
     "port": 8765,
 }
 MAX_BODY = 400_000       # 화면에서 받는 요청 크기 한도(바이트)
-HIDDEN = ("/sim/config", "/.cache", "/.git")   # 화면으로 내주지 않는 경로
+HIDDEN = ("/sim/config", "/.cache", "/.git", "/materials")   # 화면으로 내주지 않는 경로
 SESSION = {"live": None}                        # 지금 돌고 있는 생중계 받아쓰기
+INDEX = {"docs": None}                          # 읽어 둔 답변 자료
+
+
+def materials(cfg):
+    folder = Path(cfg["materials_dir"])
+    folder = folder if folder.is_absolute() else ROOT / folder
+    if INDEX["docs"] is None or INDEX["docs"].folder != folder:
+        INDEX["docs"] = docs.Index(folder)
+        INDEX["docs"].load()
+    return INDEX["docs"]
 
 
 def load_config():
@@ -99,6 +111,8 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/status":
             return self.send_json({"ok": True, "configured": bool(cfg["api_key"]), "model": cfg["model"],
                                    "service": cfg["base_url"].split("//")[-1].split("/")[0]})
+        if path == "/api/docs/status":
+            return self.send_json(materials(cfg).status())
         if path == "/api/live/channels":
             try:
                 return self.send_json({"channels": live.channels(), "ffmpeg": bool(live.find_ffmpeg())})
@@ -130,7 +144,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
-        if path not in ("/api/chat", "/api/live/start", "/api/live/stop"):
+        if path not in ("/api/chat", "/api/live/start", "/api/live/stop", "/api/docs/reload", "/api/docs/search", "/api/docs/answer", "/api/live/audio"):
             return self.send_error(404)
         if not self.local_only():
             return self.send_json({"error": "이 PC에서 연 화면의 요청만 받습니다."}, 403)
@@ -139,21 +153,49 @@ class Handler(SimpleHTTPRequestHandler):
             if SESSION["live"]:
                 SESSION["live"].stop()
             return self.send_json({"ok": True})
+        if path == "/api/docs/reload":
+            return self.send_json(materials(cfg).load())
+        if path == "/api/live/audio":                      # 마이크 소리 조각(글자가 아니라 소리 그대로)
+            length = int(self.headers.get("Content-Length") or 0)
+            data = self.rfile.read(length) if 0 < length <= MAX_BODY else b""
+            session = SESSION["live"]
+            if session and session.mic and data:
+                session.feed(data)
+            return self.send_json({"ok": bool(session and session.mic), "status": session.status if session else "idle"})
         body = self.read_json()
         if not isinstance(body, dict):
             return self.send_json({"error": "요청 형식이 올바르지 않습니다."}, 400)
+        if path == "/api/docs/search":
+            return self.send_json({"results": materials(cfg).search(str(body.get("q") or ""), int(body.get("k") or 5))})
+        if path == "/api/docs/answer":
+            # 화면에서 'AI로 답변 요지 만들기'를 켠 경우에만 호출된다. 찾은 대목만 AI 서비스로 보낸다.
+            if not cfg["api_key"] or not cfg["model"]:
+                return self.send_json({"error": "sim/config.json 에 api_key 와 model 을 넣어 주세요."}, 400)
+            passages = [str(x)[:1500] for x in body.get("passages") or []][:6]
+            prompt = ("아래 [자료]만 근거로 [질문]에 대한 답변 요지를 2~3문장으로 정리해 주세요.\n"
+                      "- 자료에 있는 수치와 표현만 쓰고, 자료에 없는 내용은 쓰지 않습니다.\n"
+                      "- 문장 끝에 근거가 된 자료 번호를 [1]처럼 붙입니다.\n"
+                      "- 자료로 답할 수 없으면 '준비된 자료에 없음'이라고만 답합니다.\n\n"
+                      "[질문]\n" + str(body.get("q") or "")[:1000] + "\n\n[자료]\n" +
+                      "\n".join(f"[{i}] {t}" for i, t in enumerate(passages, 1)))
+            status, raw = call_api(cfg, cfg["chat_path"], {"model": cfg["model"], "messages": [{"role": "user", "content": prompt}]})
+            try:
+                return self.send_json({"text": json.loads(raw)["choices"][0]["message"]["content"]})
+            except (ValueError, KeyError, IndexError, TypeError):
+                return self.send_json({"error": f"AI 서비스가 답하지 않았습니다(응답 코드 {status}).", "detail": raw[:800]}, 502)
         if path == "/api/live/start":
             url = str(body.get("url") or "")
+            mic = url == "mic"
             if not cfg["api_key"]:
                 return self.send_json({"error": "sim/config.json 에 api_key 를 넣어 주세요."}, 400)
-            if not re.match(r"https?://[^\s]+\.m3u8", url):
+            if not mic and not re.match(r"https?://[^\s]+\.m3u8", url):
                 return self.send_json({"error": "방송 주소가 올바르지 않습니다."}, 400)
             if SESSION["live"]:
                 SESSION["live"].stop()
             SESSION["live"] = live.LiveSession(cfg, url, name=str(body.get("name") or ""),
                                                terms=[str(t) for t in body.get("terms") or []][:60],
                                                hints=[str(t) for t in body.get("hints") or []],
-                                               max_minutes=int(cfg["live_max_minutes"]))
+                                               max_minutes=int(cfg["live_max_minutes"]), mic=mic)
             SESSION["live"].start()
             return self.send_json({"ok": True, "max_minutes": int(cfg["live_max_minutes"])})
         messages = body.get("messages")

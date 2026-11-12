@@ -10,6 +10,7 @@
 import base64
 import json
 import os
+import queue
 import re
 import shutil
 import socket
@@ -231,7 +232,7 @@ class WebSocket:
 # ---------- 받아쓰기 세션 ----------
 
 class LiveSession(threading.Thread):
-    def __init__(self, cfg, url, name="", terms=(), hints=(), max_minutes=240):
+    def __init__(self, cfg, url, name="", terms=(), hints=(), max_minutes=240, mic=False):
         super().__init__(daemon=True)
         self.cfg, self.url, self.title = cfg, url, name
         self.terms = [(t, re.sub(r"\s", "", t)) for t in terms if t.strip()]
@@ -243,7 +244,9 @@ class LiveSession(threading.Thread):
         self.segments, self.next_id, self.partial = [], 1, ""
         self.started, self.audio_ms, self.audio_base = time.time(), 0, 0
         self.words, self.speaker = [], ""
-        self.source = "ffmpeg" if find_ffmpeg() else "python"
+        self.mic = mic                                   # 방송 대신 화면이 보내 주는 마이크 소리를 쓴다
+        self.inbox = queue.Queue(maxsize=600)
+        self.source = "mic" if mic else "ffmpeg" if find_ffmpeg() else "python"
 
     # 상태를 화면에 넘길 모양으로
     def snapshot(self, after=0):
@@ -255,6 +258,15 @@ class LiveSession(threading.Thread):
 
     def stop(self):
         self.stop_event.set()
+
+    def feed(self, data):
+        """화면이 보낸 마이크 소리(16kHz, 16비트, 한 채널)를 받는다. 밀리면 오래된 것부터 버린다."""
+        if self.inbox.full():
+            try:
+                self.inbox.get_nowait()
+            except queue.Empty:
+                pass
+        self.inbox.put_nowait(data)
 
     def _flush(self):
         text = re.sub(r"\s+", " ", "".join(self.words)).strip()
@@ -295,6 +307,14 @@ class LiveSession(threading.Thread):
 
     def _audio(self, stop):
         """소리 덩어리를 차례로 돌려준다. (형식 설정, 덩어리 생성기)"""
+        if self.mic:
+            def chunks():
+                while not stop.is_set() and not self.stop_event.is_set():
+                    try:
+                        yield self.inbox.get(timeout=1)
+                    except queue.Empty:
+                        continue
+            return {"audio_format": "pcm_s16le", "sample_rate": 16000, "num_channels": 1}, chunks()
         ffmpeg = find_ffmpeg()
         if ffmpeg:
             def chunks():
