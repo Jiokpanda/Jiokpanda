@@ -87,6 +87,74 @@ def question_vector(cfg, index, q):
         return None
 
 
+READ_RULES = """당신은 행정사무감사 답변을 돕기 위해 준비 자료를 읽는 역할입니다. 아래 [자료]만 근거로 [질문]에 답합니다.
+
+규칙
+- 자료에 적힌 내용만으로 답합니다. 자료에 없는 수치나 사실은 쓰지 않습니다. 짐작으로 채우지 않습니다.
+- 답의 근거가 된 문장을 자료에서 글자 그대로 옮겨 evidence에 넣습니다. 줄이거나 고쳐 쓰지 않습니다.
+- 수치에는 자료에 적힌 단위와 기준 시점을 함께 적습니다. 자료끼리 수치가 다르면 둘 다 적고 다르다고 밝힙니다.
+- 질문과 낱말만 비슷하고 답이 되지 않는 자료(설문 문항, 다른 사업의 규정 등)는 근거로 쓰지 않습니다.
+- 자료로 답할 수 없으면 answerable을 false로 하고, 답이 적혀 있을 문서에 쓰였을 법한 낱말을 need에 3~6개 적습니다.
+- 아래 JSON 한 개만 출력합니다. 다른 글은 쓰지 않습니다.
+{"answerable": true 또는 false, "answer": "2~3문장의 답변 요지", "evidence": [{"n": 자료 번호, "quote": "원문 그대로"}], "need": ["낱말"]}
+"""
+
+
+def squash(text):
+    return re.sub(r"[\s\"'‘’“”`·ㆍ]", "", str(text))
+
+
+def read_with_llm(cfg, index, q, exclude):
+    """후보 대목을 LLM이 읽고 답과 근거를 고른다. 답할 수 없으면 LLM이 낸 낱말로 한 번 더 찾는다.
+    LLM의 답은 그대로 믿지 않고, 근거 인용과 답 속 숫자가 원문에 실제로 있는지 대조해 표시한다."""
+    vector = question_vector(cfg, index, q)
+    passages = index.search(q, int(cfg["rerank_candidates"]), cutoff=0, qvec=vector, exclude=exclude)
+    result, terms, rounds, note = {}, [], 0, ""
+    while passages and rounds < 2:
+        rounds += 1
+        shown = "\n\n".join(
+            f"[{n}] ({c['file'].rsplit('/', 1)[-1]} · {c['loc']}" + (f" · 문서: {c['doc']}" if c.get("doc") else "") + ")\n" +
+            (c["title"] + "\n" if c["title"] and c["title"] not in c["text"] else "") + c["text"][:1500]
+            for n, c in enumerate(passages, 1))
+        status, raw = call_api(cfg, cfg["chat_path"], {"model": cfg["model"], "messages": [
+            {"role": "user", "content": READ_RULES + "\n[질문]\n" + q + "\n\n[자료]\n" + shown}]})
+        try:
+            text = json.loads(raw)["choices"][0]["message"]["content"]
+            result = json.loads(text[text.index("{"):text.rindex("}") + 1])
+        except (ValueError, KeyError, IndexError, TypeError):
+            return {"error": f"AI 서비스가 읽을 수 있는 답을 주지 않았습니다(응답 코드 {status}).", "detail": raw[:600], "passages": passages[:5]}
+        if result.get("answerable") or rounds == 2:
+            break
+        terms = [str(t)[:20] for t in result.get("need") or [] if str(t).strip()][:8]
+        if not terms:
+            break
+        seen = {c["id"] for c in passages}
+        more = [c for c in index.search(q, int(cfg["rerank_candidates"]), extra=terms, cutoff=0, qvec=vector, exclude=exclude) if c["id"] not in seen]
+        if not more:
+            break
+        passages = more + passages[:10]                    # 새로 찾은 것에 처음 후보 상위 일부를 함께 다시 읽힌다
+    # 대조: 인용이 그 자료에 글자 그대로 있는지, 답의 숫자가 인용된 자료에 있는지
+    evidence, cited = [], []
+    for ev in result.get("evidence") or []:
+        try:
+            n = int(ev.get("n"))
+            c = passages[n - 1]
+        except (TypeError, ValueError, IndexError, AttributeError):
+            continue
+        quote = str(ev.get("quote") or "")
+        ok = bool(quote) and squash(quote) in squash(c["title"] + c["text"])
+        evidence.append({"n": n, "quote": quote, "ok": ok, "file": c["file"], "loc": c["loc"]})
+        if c not in cited:
+            cited.append(dict(c, quote=quote if ok else "", cited=True))
+    answer = str(result.get("answer") or "")
+    source = squash(" ".join(c["title"] + c["text"] for c in cited)).replace(",", "")
+    numbers = [x for x in re.findall(r"\d[\d,]*(?:\.\d+)?", answer) if len(x.replace(",", "")) >= 2]
+    unverified = sorted({x for x in numbers if x.replace(",", "") not in source})
+    rest = [c for c in passages if all(c["id"] != x["id"] for x in cited)]
+    return {"answerable": bool(result.get("answerable")), "answer": answer, "evidence": evidence, "unverified": unverified,
+            "passages": cited + rest[:max(0, 5 - len(cited))], "rounds": rounds, "terms": terms, "sent": len(passages), "note": note}
+
+
 def loaded(index, seconds=20):
     """자료를 처음 읽는 중이면 끝날 때까지(최대 seconds초) 기다렸다가 돌려준다."""
     import time
@@ -186,7 +254,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
-        if path not in ("/api/chat", "/api/live/start", "/api/live/stop", "/api/docs/reload", "/api/docs/search", "/api/docs/refine", "/api/docs/answer", "/api/live/audio",
+        if path not in ("/api/chat", "/api/live/start", "/api/live/stop", "/api/docs/reload", "/api/docs/search", "/api/docs/refine", "/api/docs/answer", "/api/docs/ask", "/api/live/audio",
                         "/api/docs/embed", "/api/docs/embed-clear"):
             return self.send_error(404)
         if not self.local_only():
@@ -225,6 +293,12 @@ class Handler(SimpleHTTPRequestHandler):
             index, q = loaded(materials(cfg)), str(body.get("q") or "")
             skip = [str(x) for x in body.get("exclude") or []]
             return self.send_json({"results": index.search(q, int(body.get("k") or 5), qvec=question_vector(cfg, index, q), exclude=skip)})
+        if path == "/api/docs/ask":
+            # 화면에서 AI를 켠 경우에만 호출된다. 질문과 후보 대목이 AI 서비스로 전송된다.
+            if not cfg["api_key"] or not cfg["model"]:
+                return self.send_json({"error": "sim/config.json 에 api_key 와 model 을 넣어 주세요."}, 400)
+            return self.send_json(read_with_llm(cfg, loaded(materials(cfg)), str(body.get("q") or "")[:1000],
+                                                [str(x) for x in body.get("exclude") or []]))
         if path == "/api/docs/refine":
             # 화면에서 AI를 켠 경우에만 호출된다. ① 질문으로 검색어를 넓히고 ② 넓게 찾은 후보를 재정렬 모델로 다시 고른다.
             if not cfg["api_key"]:

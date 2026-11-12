@@ -149,7 +149,8 @@ details.examples summary { cursor: pointer; font-size: 14px; text-decoration: un
 .ex:first-of-type { margin-top: 8px; }
 .preview pre { white-space: pre-wrap; font: 13px/1.7 ui-monospace, Consolas, monospace; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; max-height: 360px; overflow: auto; }
 .simbox .filters { margin: 4px 0 0; }
-.item.error .quote, .warn { color: var(--accent); }
+.item.error .quote, .warn, .item .asked.warn, .item .asked.warn b { color: var(--accent); }
+.cite { font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .item .quote.t { white-space: pre-line; }
 
 /* 첫 화면 */
@@ -461,6 +462,25 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
     fetch("/api/docs/refine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: q, exclude: mat.off }) })
       .then(function (r) { return r.json(); }).then(function (j) { done(j); }).catch(function (e) { done({ error: String(e) }); });
   }
+  // AI를 켠 경우: 로컬 서버가 후보 대목을 LLM에게 읽혀 답과 근거를 고르고, 인용과 숫자를 원문과 대조한다.
+  function matAsk(q, done) {
+    fetch("/api/docs/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: q, exclude: mat.off }) })
+      .then(function (r) { return r.json(); }).then(done).catch(function (e) { done({ error: String(e) }); });
+  }
+  // AI가 낸 답과, 그 답을 원문과 대조한 결과를 보여 준다.
+  function matVerdict(a) {
+    if (!a) return "";
+    if (a.busy) return '<div class="item"><div class="asked"><b>AI 판독</b></div><div class="quote">후보 자료를 읽는 중입니다…</div><div class="meta"></div></div>';
+    if (a.error) return '<div class="item error"><div class="asked"><b>AI 판독</b></div><div class="quote">' + esc(a.error) + (a.detail ? "<br>" + esc(a.detail) : "") + '</div><div class="meta"></div></div>';
+    var ev = a.evidence || [], good = ev.filter(function (e) { return e.ok; }).length, bad = ev.length - good;
+    var check = !a.answerable ? "" : (bad || (a.unverified || []).length || !ev.length)
+      ? '<div class="asked warn"><b>확인 필요</b> ' + [!ev.length ? "근거 인용이 없습니다" : "", bad ? "인용 " + bad + "건이 원문과 일치하지 않습니다" : "",
+          (a.unverified || []).length ? "답에 나온 수치 " + a.unverified.join(", ") + " 이(가) 근거 자료에서 확인되지 않습니다" : ""].filter(Boolean).join(" · ") + "</div>"
+      : '<div class="asked"><b>대조 결과</b> 인용 ' + good + "건이 원문과 일치하고, 답의 수치가 모두 근거 자료에 있습니다.</div>";
+    return '<div class="item"><div class="asked"><b>AI 판독 (원문 대조 포함)</b> 후보 ' + (a.sent || 0) + "개를 " + (a.rounds || 1) + "회 읽음" +
+      ((a.terms || []).length ? " · 다시 찾은 낱말: " + esc(a.terms.join(", ")) : "") + "</div>" +
+      '<div class="quote t">' + (a.answerable ? esc(a.answer) : "준비된 자료에서 답을 찾지 못했습니다." + (a.answer ? " " + esc(a.answer) : "")) + "</div>" + check + '<div class="meta"></div></div>';
+  }
   function matAnswer(q, results, done) {
     fetch("/api/docs/answer", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ q: q, passages: results.map(function (x) { return (x.title && x.text.indexOf(x.title) < 0 ? x.title + " — " : "") + x.text; }) }) })
@@ -481,8 +501,13 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
   }
   function matResults(results, q) {
     return results.map(function (x, i) {
-      return '<div class="item"><div class="quote t">' + markWords(x.text, q) + "</div>" +
-        '<div class="meta"><span>[' + (i + 1) + "] " + esc(x.file) + "</span><span>" + esc(x.loc) + "</span>" +
+      var shown = markWords(x.text, q);
+      if (x.quote && x.text.indexOf(x.quote) >= 0) {       // AI가 근거로 든 문장은 굵게 표시한다
+        var at = x.text.indexOf(x.quote);
+        shown = markWords(x.text.slice(0, at), q) + '<strong class="cite">' + esc(x.quote) + "</strong>" + markWords(x.text.slice(at + x.quote.length), q);
+      }
+      return '<div class="item"><div class="quote t">' + shown + "</div>" +
+        '<div class="meta"><span>[' + (i + 1) + "] " + esc(x.file) + "</span><span>" + esc(x.loc) + "</span>" + (x.cited ? "<span>AI가 고른 근거</span>" : "") +
         (x.via ? "<span>" + esc(x.via) + "로 찾음</span>" : "") + (x.copies ? "<span>같은 내용 " + x.copies + "곳 더</span>" : "") + (x.relevance !== undefined ? "<span>관련도 " + x.relevance + "</span>" : "") +
         (x.title && x.text.indexOf(x.title) < 0 ? "<span>" + esc(x.title) + "</span>" : "") + "</div></div>";
     }).join("");
@@ -540,10 +565,11 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
       if (state.tab === "live") render();
       if (live.help.busy) {
         var mine = live.help;
-        matRefine(q, function (j) {
-          if (j.results && j.results.length) mine.results = j.results.slice(0, 3);
+        mine.verdict = { busy: true };
+        matAsk(q, function (j) {
+          if (j.passages && j.passages.length) mine.results = j.passages.slice(0, 3);
+          mine.verdict = j; mine.busy = false;
           if (state.tab === "live" && live.help === mine) render();
-          matAnswer(q, mine.results, function (text, error) { mine.answer = text; mine.error = error; mine.busy = false; if (state.tab === "live" && live.help === mine) render(); });
         });
       }
     });
@@ -863,10 +889,9 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
         }).join("") + "</div>";
         body += '<div class="cform wide"><textarea id="docq" rows="2" placeholder="질문을 입력하세요 (예: 희망도서 중복 구입이 올해는 몇 건입니까)" aria-label="질문">' + esc(mat.q) + "</textarea></div>" +
           '<div class="filters"><button class="printbtn primary" type="button" id="docsearch"' + (ms.chunks ? "" : " disabled") + ">찾기</button>" +
-          '<label class="check"><input type="checkbox" id="docai"' + (mat.ai ? " checked" : "") + "> AI로 다시 고르고 요지 만들기 (질문과 후보 대목 최대 40개가 팩트챗으로 전송됩니다)</label></div>";
+          '<label class="check"><input type="checkbox" id="docai"' + (mat.ai ? " checked" : "") + "> AI가 후보를 읽고 답과 근거 찾기 (질문과 후보 대목 최대 40개가 팩트챗으로 전송됩니다)</label></div>";
         if (mat.results) {
-          if (mat.ai && mat.results.length) body += '<div class="item"><div class="asked"><b>답변 요지 (AI 생성 · 아래 원문으로 확인)</b></div><div class="quote t">' +
-            (mat.busy ? "만드는 중입니다…" : mat.error ? '<span class="warn">' + esc(mat.error) + "</span>" : esc(mat.answer)) + '</div><div class="meta"></div></div>';
+          if (mat.ai) body += matVerdict(mat.verdict);
           body += '<div class="year">관련 자료 ' + mat.results.length + "건</div>" + (mat.note ? '<p class="count">' + esc(mat.note) + "</p>" : "") +
             (mat.results.length ? matResults(mat.results, mat.q) : '<p class="empty">관련된 대목을 찾지 못했습니다. 준비된 자료에 없는 질문일 수 있습니다.</p>');
         }
@@ -903,8 +928,7 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
           '<p class="count" id="livestatus">' + esc(liveStatusText()) + "</p>";
         if (live.help) {
           body += '<div class="year">방금 질문 관련 자료 · ' + esc(live.help.time) + '</div><p class="count">' + esc(live.help.q) + "</p>" +
-            (mat.ai && live.help.results.length ? '<div class="item"><div class="asked"><b>답변 요지 (AI 생성 · 아래 원문으로 확인)</b></div><div class="quote t">' +
-              (live.help.busy ? "만드는 중입니다…" : live.help.error ? '<span class="warn">' + esc(live.help.error) + "</span>" : esc(live.help.answer)) + '</div><div class="meta"></div></div>' : "") +
+            (mat.ai ? matVerdict(live.help.verdict) : "") +
             (live.help.results.length ? matResults(live.help.results, live.help.q) : '<p class="empty">관련된 대목을 찾지 못했습니다.</p>');
         }
         var mentions = live.segments.filter(function (g) { return g.hits.length; });
@@ -1121,14 +1145,15 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
       mat.note = "";
       matSearch(mat.q, function (results) {
         mat.results = results; mat.busy = mat.ai && results.length > 0; render();
-        if (!mat.busy) return;
+        mat.verdict = mat.busy ? { busy: true } : null;
+        if (!mat.busy) { render(); return; }
+        render();
         var asked = mat.q;
-        matRefine(asked, function (j) {                    // 먼저 뜬 결과를 AI가 다시 고른 결과로 바꾼다
+        matAsk(asked, function (j) {                       // 먼저 뜬 결과를, AI가 읽고 고른 근거가 앞에 오는 목록으로 바꾼다
           if (asked !== mat.q) return;
-          if (j.results && j.results.length) mat.results = j.results;
-          mat.note = j.error || [j.reranked ? "AI가 후보 " + j.sent + "개 중에서 다시 골랐습니다." : "", (j.terms || []).length ? "넓힌 검색어: " + j.terms.join(", ") : "", j.note || ""].filter(Boolean).join(" · ");
-          render();
-          matAnswer(asked, mat.results, function (text, error) { mat.answer = text; mat.error = error; mat.busy = false; if (state.tab === "docs") render(); });
+          if (j.passages && j.passages.length) mat.results = j.passages;
+          mat.verdict = j; mat.busy = false;
+          if (state.tab === "docs") render();
         });
       });
       return;
