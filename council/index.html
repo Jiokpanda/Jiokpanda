@@ -5,158 +5,202 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>행감 대비 브리핑</title>
 <style>
+/* 화면 원칙: 무채색 바탕에 강조색 하나(시정·오류에만), 상자 대신 가는 줄로 나눈 목록,
+   버튼은 채운 것 하나와 테두리만 있는 것 하나, 13px 미만 글자 없음, 그림자·그라디언트 없음. */
 :root {
-  --bg: #f4f5f2; --surface: #ffffff; --line: #dcdfd8; --text: #1c2421; --muted: #5d6965;
-  --accent: #0f5c56; --accent-soft: #e2efec; --warn: #9a4a10; --warn-soft: #fbeedd;
-  --mark: #ffe58a; --member: #f1f4f8; --official: #ffffff;
+  --paper: #fcfcfa; --field: #ffffff; --ink: #1d1c1a; --muted: #66635b;
+  --rule: rgba(29, 28, 26, .14); --rule-strong: rgba(29, 28, 26, .34); --wash: rgba(29, 28, 26, .05);
+  --accent: #a8321f; --mark: #f6e39a;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #141917; --surface: #1c2321; --line: #313b38; --text: #e6ebe8; --muted: #9aa7a2;
-    --accent: #6fc9bd; --accent-soft: #1f3532; --warn: #f0b072; --warn-soft: #3a2a18;
-    --mark: #7a6410; --member: #232c31; --official: #1c2321;
+    --paper: #181715; --field: #211f1c; --ink: #ebe9e4; --muted: #a29f96;
+    --rule: rgba(235, 233, 228, .16); --rule-strong: rgba(235, 233, 228, .38); --wash: rgba(235, 233, 228, .07);
+    --accent: #ee8b78; --mark: #6a5912;
   }
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
-  margin: 0; background: var(--bg); color: var(--text);
-  font: 16px/1.65 "Pretendard", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  margin: 0; background: var(--paper); color: var(--ink);
+  font: 16px/1.7 "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
   word-break: keep-all; overflow-wrap: anywhere;
 }
-.wrap { max-width: 980px; margin: 0 auto; padding: 0 16px 80px; }
-header.top { padding: 36px 0 20px; }
-header.top h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; text-wrap: balance; }
-header.top p { margin: 6px 0 0; color: var(--muted); max-width: 60ch; }
-a { color: var(--accent); }
-button { font: inherit; color: inherit; cursor: pointer; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { text-decoration-thickness: 2px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; transition: background-color .15s; }
+button[disabled] { opacity: .45; cursor: default; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+h1, h2, h3 { letter-spacing: -0.01em; }
+mark { background: var(--mark); color: inherit; padding: 0 1px; }
+code { font: 14px ui-monospace, Consolas, monospace; background: var(--wash); padding: 1px 5px; border-radius: 3px; }
 
-.search { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
-.search label { display: block; font-weight: 700; margin-bottom: 8px; }
-.search input[type=search] {
-  width: 100%; padding: 12px 14px; font: inherit; color: inherit; background: var(--bg);
-  border: 1px solid var(--line); border-radius: 8px;
+/* 뼈대: 왼쪽에 부서와 보기 목록, 오른쪽에 본문 */
+.app { display: grid; grid-template-columns: 288px minmax(0, 1fr); min-height: 100vh; }
+.side { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 28px 24px 32px; border-right: 1px solid var(--rule); }
+.page { padding: 36px 56px 96px; max-width: 980px; }
+.brand { margin: 0 0 24px; font-size: 16px; font-weight: 700; }
+.search label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+input[type=search], select, textarea {
+  background: var(--field); border: 1px solid var(--rule-strong); border-radius: 4px; padding: 0 10px; height: 36px; min-width: 0;
 }
-.hint { color: var(--muted); font-size: 14px; margin: 10px 0 6px; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+textarea { height: auto; padding: 8px 10px; line-height: 1.6; resize: vertical; width: 100%; }
+.search input { width: 100%; height: 40px; }
+.hint { color: var(--muted); font-size: 14px; margin: 8px 0; max-width: 46em; }
+.chips { max-height: 38vh; overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
 .chip {
-  border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
-  padding: 4px 12px; font-size: 14px; line-height: 1.5;
+  display: flex; align-items: baseline; gap: 10px; width: 100%; padding: 6px 0; border: 0; background: none; text-align: left; font-size: 15px;
 }
-.chip small { color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
-.chip[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
-.chip[aria-pressed=true] small { color: inherit; opacity: .8; }
+.chip::before {
+  content: ""; flex: 0 0 14px; height: 14px; border: 1px solid var(--rule-strong); border-radius: 3px; align-self: center;
+}
+.chip[aria-pressed=true] { font-weight: 700; }
+.chip[aria-pressed=true]::before { background: var(--ink); border-color: var(--ink); box-shadow: inset 0 0 0 2px var(--paper); }
+.chip small { margin-left: auto; font-size: 13px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-h2 { font-size: 20px; margin: 36px 0 10px; letter-spacing: -0.01em; }
-h2 small { font-weight: 400; color: var(--muted); font-size: 14px; margin-left: 6px; }
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 20px; }
-.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-.stat b { display: block; font-size: 26px; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.stat span { color: var(--muted); font-size: 14px; }
+.tabs { margin-top: 20px; border-top: 1px solid var(--rule); }
+.navgroup { margin: 18px 0 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.tabs button {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px; width: calc(100% + 20px); margin: 0 -10px;
+  padding: 7px 10px; border: 0; border-radius: 4px; background: none; text-align: left; font-size: 15px; white-space: nowrap;
+}
+.tabs button:hover { background: var(--wash); }
+.tabs button[aria-selected=true] { background: var(--wash); font-weight: 700; }
+.tabs small { font-size: 13px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.tablebox { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
-table { border-collapse: collapse; width: 100%; font-size: 15px; }
-th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
-th:first-child, td:first-child { text-align: left; }
-thead th { color: var(--muted); font-weight: 600; font-size: 13px; }
-tbody tr:last-child td { border-bottom: 0; }
-td button.name { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; }
-.badge { display: inline-block; font-size: 12px; padding: 0 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; }
+/* 본문 머리 */
+.titlebar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 16px; }
+.titlebar h2 { margin: 0; font-size: 24px; line-height: 1.35; }
+.stats { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+.stat + .stat::before { content: " · "; }
+.stat b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.viewtitle { margin: 36px 0 0; padding-bottom: 10px; border-bottom: 2px solid var(--ink); font-size: 18px; }
+h2 small { font-weight: 400; color: var(--muted); font-size: 14px; margin-left: 8px; }
+main > h2 { margin: 40px 0 0; padding-bottom: 10px; border-bottom: 2px solid var(--ink); font-size: 18px; }
 
-.tabs { display: flex; gap: 4px; margin-top: 36px; border-bottom: 1px solid var(--line); overflow-x: auto; }
-.tabs button { border: 0; background: none; padding: 10px 14px; border-bottom: 3px solid transparent; color: var(--muted); white-space: nowrap; }
-.tabs button[aria-selected=true] { color: var(--text); font-weight: 700; border-bottom-color: var(--accent); }
-.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0; }
-.filters select, .filters input { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
-.filters input { flex: 1 1 180px; min-width: 0; }
-.count { color: var(--muted); font-size: 14px; }
+/* 버튼: 테두리만 있는 기본형과, 화면마다 하나만 쓰는 채운 버튼 */
+.printbtn, .more {
+  height: 36px; padding: 0 14px; border: 1px solid var(--rule-strong); border-radius: 4px; background: transparent; font-size: 14px; font-weight: 500;
+}
+.printbtn:hover:not([disabled]), .more:hover { background: var(--wash); }
+.printbtn.primary { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.printbtn.primary:hover:not([disabled]) { background: var(--ink); opacity: .86; }
+.more { display: block; margin: 20px 0; }
+.linkbtn, .item .meta button, td button.name {
+  background: none; border: 0; padding: 0; font-size: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;
+}
 
-.year { font-size: 15px; color: var(--muted); font-weight: 700; margin: 22px 0 8px; }
-.item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
-.item .quote { padding: 12px 14px 4px; }
-.item .asked { padding: 10px 14px 0; color: var(--muted); font-size: 14px; }
-.item .asked + .quote { padding-top: 4px; }
-.item .asked b, .item .quote b { font-size: 12px; font-weight: 700; color: var(--muted); margin-right: 6px; }
-.item .meta { padding: 0 14px 10px; color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
-.item .meta button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; }
-.item.promise { border-left: 4px solid var(--accent); }
-.item.request { border-left: 4px solid var(--warn); }
-.preview pre { white-space: pre-wrap; font: 13px/1.6 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 360px; overflow: auto; }
-.simbox { padding: 12px 0 0; }
-.simbox .filters { margin: 0; }
-label.check { font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
-.filters label.check input { flex: 0 0 auto; min-width: 0; padding: 0; }
-code { font: 13px ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
-button[disabled] { opacity: .5; cursor: default; }
-.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; margin-left: 6px; }
-.item.member .asked { color: var(--text); }
-.item.member .tag { margin-left: 0; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0 8px; }
+.filters input[type=search] { flex: 1 1 200px; }
 .filters a { font-size: 14px; }
-.tabsep { flex: 0 0 1px; background: var(--line); margin: 8px 8px; }
-.item.check { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
-.item.check .cbody { min-width: 0; }
-.cform { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; border-left: 1px solid var(--line); }
-.cform.wide { border-left: 0; padding: 4px 14px 10px; }
-.cform select, .cform textarea { font: inherit; font-size: 14px; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; }
-.cform textarea { resize: vertical; min-height: 44px; }
-@media (max-width: 720px) {
-  .item.check { grid-template-columns: minmax(0, 1fr); }
-  .item.check .cform { border-left: 0; border-top: 1px solid var(--line); }
-}
-.item.topic .asked { padding-bottom: 6px; }
-details.examples { padding: 0 14px 10px; font-size: 14px; }
-details.examples summary { cursor: pointer; color: var(--accent); padding: 4px 0; }
-.ex { padding: 8px 0; border-top: 1px solid var(--line); }
-.ex .meta { padding: 2px 0 0; }
-.kind.k-약속 { background: var(--member); color: var(--text); }
-.kind { display: inline-block; font-size: 12px; font-weight: 700; padding: 0 8px; border-radius: 4px; margin-right: 8px; background: var(--accent-soft); color: var(--accent); vertical-align: 2px; }
-.kind.k-시정 { background: var(--warn-soft); color: var(--warn); }
-details.thread > summary { list-style: none; cursor: pointer; padding: 12px 14px; }
-details.thread > summary::-webkit-details-marker { display: none; }
-details.thread > summary .who { font-weight: 700; }
-details.thread > summary .lead { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
-details.thread[open] > summary { border-bottom: 1px solid var(--line); }
-.tag { display: inline-block; font-size: 12px; padding: 0 7px; border-radius: 4px; background: var(--warn-soft); color: var(--warn); margin-left: 6px; font-weight: 400; }
-.talk { padding: 4px 14px 12px; }
-.say { padding: 10px 12px; border-radius: 8px; margin-top: 8px; white-space: pre-line; max-width: 75ch; }
-.say.m { background: var(--member); }
-.say.o { background: var(--official); border: 1px solid var(--line); margin-left: 20px; }
-.say b { display: block; font-size: 13px; color: var(--muted); }
-mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; }
-.more { display: block; margin: 12px auto; padding: 8px 20px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; }
+label.check { font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.count { color: var(--muted); font-size: 13px; }
 .empty { color: var(--muted); padding: 24px 0; }
-footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
-footer ul { padding-left: 18px; margin: 6px 0; }
-.printbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 14px; font-size: 14px; }
-.titlebar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 28px; }
-.titlebar h2 { margin: 0; font-size: 24px; }
+
+/* 목록: 상자 없이 가는 줄로만 나눈다 */
+.year { margin: 28px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--rule-strong); font-size: 13px; font-weight: 600; color: var(--muted); }
+.item { padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.item .quote { max-width: 46em; }
+.item .asked { max-width: 48em; color: var(--muted); font-size: 15px; margin-bottom: 2px; }
+.item .asked b, .item .quote > b { font-size: 13px; font-weight: 600; margin-right: 8px; color: var(--muted); }
+.item .meta { display: flex; flex-wrap: wrap; gap: 0 14px; align-items: baseline; margin-top: 4px; color: var(--muted); font-size: 13px; }
+.item .meta:empty { display: none; }
+.kind { display: inline-block; min-width: 2.7em; margin-right: 6px; font-size: 13px; font-weight: 700; }
+.kind.k-시정 { color: var(--accent); }
+.kind.k-약속 { font-weight: 600; color: var(--muted); }
+.badge, .tag { margin-left: 6px; font-size: 13px; font-weight: 400; color: var(--muted); }
+.badge::before, .tag::before { content: "· "; }
+.role { margin-left: 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.item.member .asked, .item.topic .asked { color: var(--ink); }
+.item.member .asked b { display: inline-block; min-width: 7.5em; margin-right: 0; }
+.item.member .quote { margin-bottom: 2px; }
+details.thread summary .count { margin-left: 6px; }
+details.thread summary .count::before { content: "· "; }
+
+details.thread > summary { position: relative; list-style: none; cursor: pointer; padding-right: 3.2em; }
+details.thread > summary::-webkit-details-marker { display: none; }
+details.thread > summary::after { content: "열기"; position: absolute; right: 0; top: 2px; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+details.thread[open] > summary::after { content: "닫기"; }
+details.thread .who { font-weight: 700; }
+details.thread .lead { display: block; max-width: 48em; color: var(--muted); font-size: 15px; }
+.talk { padding: 4px 0 2px; }
+/* 문답은 회의록처럼: 왼쪽에 발언자, 오른쪽에 발언 */
+.say { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); column-gap: 20px; padding: 5px 0; }
+.say b { font-size: 13px; line-height: 1.7; padding-top: 3px; font-weight: 500; color: var(--muted); }
+.say.m { margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.say.m b { font-weight: 700; color: var(--ink); }
+.say .t { white-space: pre-line; max-width: 46em; }
+
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+.tablebox { overflow-x: auto; }
+th, td { padding: 8px 12px 8px 0; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-size: 13px; font-weight: 600; color: var(--muted); border-bottom-color: var(--rule-strong); }
+
+/* 점검표: 왼쪽 내용, 오른쪽 입력 */
+.item.check { display: grid; grid-template-columns: minmax(0, 1fr) 264px; column-gap: 24px; }
+.cform { display: flex; flex-direction: column; gap: 6px; }
+.cform select, .cform textarea { font-size: 14px; width: 100%; }
+.cform.wide { margin: 8px 0; max-width: 46em; }
+details.examples { margin-top: 6px; font-size: 15px; }
+details.examples summary { cursor: pointer; font-size: 14px; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.ex { padding: 10px 0; border-top: 1px solid var(--rule); max-width: 48em; }
+.ex:first-of-type { margin-top: 8px; }
+.preview pre { white-space: pre-wrap; font: 13px/1.7 ui-monospace, Consolas, monospace; border: 1px solid var(--rule); border-radius: 4px; padding: 12px; max-height: 360px; overflow: auto; }
+.simbox .filters { margin: 4px 0 0; }
+.item.error .quote { color: var(--accent); }
+
+/* 첫 화면 */
+.home h2 { margin: 0; font-size: 24px; line-height: 1.35; }
+.home .lede { max-width: 40em; color: var(--muted); margin: 8px 0 0; }
+.deptgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); column-gap: 32px; }
+.deptlink { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 9px 0; border: 0; border-bottom: 1px solid var(--rule); background: none; text-align: left; }
+.deptlink:hover span { text-decoration: underline; text-underline-offset: 3px; }
+.deptlink small { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+footer { margin-top: 64px; padding-top: 14px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 13px; max-width: 52em; }
+footer ul { padding-left: 18px; margin: 6px 0 0; }
+
+@media (max-width: 860px) {
+  .app { display: block; }
+  .side { position: static; height: auto; padding: 20px 16px 0; border-right: 0; }
+  .page { padding: 20px 16px 64px; }
+  .chips { max-height: 30vh; }
+  .tabs { display: flex; gap: 2px; overflow-x: auto; margin: 16px -16px 0; padding: 8px 16px; border-bottom: 1px solid var(--rule); }
+  .tabs button { width: auto; margin: 0; gap: 6px; }
+  .navgroup { display: none; }
+  .item.check { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
+  .say { grid-template-columns: minmax(0, 1fr); }
+  .say b { padding-top: 0; }
+}
 @media print {
   body { background: #fff; font-size: 11pt; }
-  .search, .tabs, .filters, .printbtn, .more { display: none !important; }
+  .app { display: block; }
+  .side, .filters, .printbtn, .more, footer { display: none !important; }
+  .page { padding: 0; max-width: none; }
+  .item { break-inside: avoid; }
   .cform textarea { border: 1px solid #999; min-height: 60px; }
-  .item, .stat, .tablebox { break-inside: avoid; }
 }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <h1>행감 대비 브리핑</h1>
-    <p>용인특례시의회가 공개한 행정사무감사 회의록에서, 우리 부서가 받은 질의와 답변을 모아 보여 줍니다.</p>
-  </header>
-
-  <section class="search">
-    <label for="q">부서명</label>
-    <input id="q" type="search" placeholder="예: 도서관정책과, 행정과, 처인구보건소" autocomplete="off">
-    <p class="hint" id="hint"></p>
-    <div class="chips" id="chips"></div>
-  </section>
-
+<div class="app">
+  <aside class="side">
+    <h1 class="brand">행감 대비 브리핑</h1>
+    <div class="search">
+      <label for="q">부서</label>
+      <input id="q" type="search" placeholder="부서명 일부 입력" autocomplete="off">
+      <p class="hint" id="hint"></p>
+      <div class="chips" id="chips"></div>
+    </div>
+    <nav class="tabs" id="nav" aria-label="보기"></nav>
+  </aside>
+  <div class="page">
   <main id="out"></main>
 
   <footer>
-    <strong>자료 출처와 유의사항</strong>
+    자료 출처와 유의사항
     <ul>
       <li>출처: <a href="https://council.yongin.go.kr/kr/minutes/search.do" target="_blank" rel="noopener">용인특례시의회 회의록</a>(행정사무감사 회의록과 올해 일반 회의록), 의안검색, 행정사무감사 계획서. <span id="gen"></span></li>
       <li>부서는 답변자의 직함(예: “행정과장”)으로 구분합니다. 조직 개편으로 이름이 바뀐 부서는 옛 이름도 함께 골라 주세요.</li>
@@ -164,6 +208,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       <li>‘결과보고서 지적사항’은 <a href="https://council.yongin.go.kr/kr/inspectionBBS.do" target="_blank" rel="noopener">의회 행정사무감사 게시판</a>에 올라온 연도별 결과보고서의 처리의견 표에서 가져왔습니다. 보고서의 부서 표기가 회의록과 다르면 연결되지 않을 수 있습니다.</li>
     </ul>
   </footer>
+  </div>
 </div>
 
 <script src="data/index.js"></script>
@@ -229,29 +274,41 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     var list;
     if (q) {
       list = deptNames.filter(function (d) { return norm(d).indexOf(q) >= 0; });
-      $("hint").textContent = list.length ? "이름에 검색어가 들어간 부서입니다. 눌러서 고르세요(여러 개 가능)." : "해당하는 부서가 없습니다. 이름의 일부만 넣어 보세요.";
+      $("hint").textContent = list.length ? "눌러서 고릅니다. 여러 부서를 함께 고를 수 있습니다." : "해당하는 부서가 없습니다. 이름의 일부만 넣어 보세요.";
     } else {
-      list = deptNames.slice().sort(function (a, b) { return IDX.depts[b].n - IDX.depts[a].n; }).slice(0, 24);
-      $("hint").textContent = "부서명을 입력하거나, 질의가 많았던 부서에서 고르세요.";
+      list = [];
+      $("hint").textContent = Object.keys(selected).length ? "" : "이름 일부를 입력해 고릅니다. 여러 부서를 함께 고를 수 있습니다.";
     }
     Object.keys(selected).forEach(function (d) { if (list.indexOf(d) < 0) list.unshift(d); });
     list.sort(function (a, b) { return (selected[b] ? 1 : 0) - (selected[a] ? 1 : 0) || IDX.depts[b].n - IDX.depts[a].n; });
     $("chips").innerHTML = list.slice(0, 60).map(function (d) {
       return '<button class="chip" type="button" aria-pressed="' + (selected[d] ? "true" : "false") + '" data-dept="' + esc(d) + '">' +
-        esc(d) + "<small>" + (IDX.depts[d].n ? IDX.depts[d].n + "건 · " + deptYears(d) : "올해 " + (IDX.depts[d].pn || 0) + "건") + "</small></button>";
+"<span>" + esc(d) + "</span><small>" + (IDX.depts[d].n ? IDX.depts[d].n + "건 · " + deptYears(d) : "올해 " + (IDX.depts[d].pn || 0) + "건") + "</small></button>";
     }).join("");
   }
   $("q").addEventListener("input", renderChips);
   $("chips").addEventListener("click", function (e) {
     var b = e.target.closest("button[data-dept]");
-    if (!b) return;
-    var d = b.getAttribute("data-dept");
+    if (b) toggleDept(b.getAttribute("data-dept"));
+  });
+  function toggleDept(d) {
     if (selected[d]) delete selected[d]; else selected[d] = true;
     state.year = ""; state.member = ""; state.limit = 30; state.committee = undefined;
     sim.messages = []; sim.member = ""; sim.error = "";
     renderChips();
     loadAndRender();
-  });
+    window.scrollTo(0, 0);
+  }
+  // 부서를 고르기 전 첫 화면
+  function renderHome() {
+    $("nav").innerHTML = "";
+    var top = deptNames.slice().sort(function (a, b) { return IDX.depts[b].n - IDX.depts[a].n; }).slice(0, 30);
+    out.innerHTML = '<div class="home"><h2>부서를 고르면 시작합니다</h2>' +
+      '<p class="lede">부서명을 입력해 고르면, 지난 행정사무감사에서 그 부서가 받은 지적과 질의, 올해 감사 일정과 감사위원을 한곳에서 볼 수 있습니다.</p>' +
+      '<div class="year">지난 4년간 질의가 많았던 부서</div><div class="deptgrid">' + top.map(function (d) {
+        return '<button type="button" class="deptlink" data-dept="' + esc(d) + '"><span>' + esc(d) + "</span><small>" + IDX.depts[d].n + "건</small></button>";
+      }).join("") + "</div></div>";
+  }
 
   /* ---------- 회의록 자료 불러오기 ---------- */
   var waiting = {};
@@ -272,12 +329,18 @@ footer ul { padding-left: 18px; margin: 6px 0; }
   var runId = 0;
   function loadAndRender() {
     var depts = Object.keys(selected);
-    if (!depts.length) { out.innerHTML = ""; return; }
+    if (!depts.length) { renderHome(); return; }
     var uids = {};
     depts.forEach(function (d) { IDX.depts[d].uids.concat(IDX.depts[d].pre || []).forEach(function (u) { uids[u] = true; }); });
     var my = ++runId;
     out.innerHTML = '<p class="empty">회의록을 불러오는 중입니다…</p>';
     Promise.all(Object.keys(uids).map(load)).then(function () { if (my === runId) render(); });
+  }
+
+  // 계획서 일정표의 기호(○, 【 】, ⦁ 등)를 읽기 쉬운 글로 바꾼다.
+  function planText(t) {
+    return t.replace(/【\s*(.*?)\s*】/g, " / $1:").replace(/[○◌◦◯]/g, " / ").replace(/[⦁•∙▪․]\s*/g, " ")
+      .replace(/\s-\s/g, " ").replace(/\s+/g, " ").replace(/^[\s\/]+/, "").trim();
   }
 
   /* ---------- 감사 일정에서 부서 찾기 ---------- */
@@ -397,7 +460,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     var lead = first.replace(/\n/g, " ");
     if (lead.length > 110) lead = lead.slice(0, 110) + "…";
     var talk = t.b.map(function (b) {
-      return '<div class="say ' + b[0] + '"><b>' + esc(b[1]) + "</b>" + hl(b[2], state.word) + "</div>";
+      return '<div class="say ' + b[0] + '"><b>' + esc(b[1]) + "</b><span class=\"t\">" + hl(b[2], state.word) + "</span></div>";
     }).join("");
     return '<details class="item thread"' + (open ? " open" : "") + "><summary>" +
       '<span class="who">' + asker(t) + "</span>" + (t.k === "report" ? '<span class="tag">업무보고</span>' : t.k === "chair" ? '<span class="tag">위원장 진행</span>' : "") +
@@ -451,40 +514,32 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     };
 
     var h = '<div class="titlebar"><h2>' + esc(depts.join(", ")) + '</h2><button class="printbtn" type="button" id="print">인쇄</button></div>';
-    h += '<div class="stats">' +
-      (FINDINGS.length ? '<div class="stat"><b>' + findings.length + "</b><span>결과보고서 지적사항 (시정 " + kindCount["시정"] +
-        " · 처리 " + kindCount["처리"] + " · 건의 " + kindCount["건의"] + ")</span></div>" : "") +
-      '<div class="stat"><b>' + qa.length + "</b><span>의원 질의 묶음" + (ys.length ? " (" + (ys.length > 1 ? ys[ys.length - 1] + "~" : "") + ys[0] + "년)" : "") + "</span></div>" +
-      '<div class="stat"><b>' + Object.keys(memberStat).length + "</b><span>질의한 의원</span></div>" +
-      '<div class="stat"><b>' + promises.length + "</b><span>약속·검토 답변</span></div>" +
-      '<div class="stat"><b>' + requests.length + "</b><span>자료 요구 발언</span></div></div>";
+    h += '<p class="stats">' +
+      (ys.length ? '<span class="stat">' + (ys.length > 1 ? ys[ys.length - 1] + "~" : "") + ys[0] + "년 행정사무감사</span>" : "") +
+      '<span class="stat">의원 질의 <b>' + qa.length + "</b>건</span>" +
+      (FINDINGS.length ? '<span class="stat">지적사항 <b>' + findings.length + "</b>건 (시정 " + kindCount["시정"] +
+        ", 처리 " + kindCount["처리"] + ", 건의 " + kindCount["건의"] + ")</span>" : "") + "</p>";
 
     var members = Object.keys(memberStat).map(function (c) { return { code: c, s: memberStat[c] }; })
       .sort(function (a, b) {
         return (IDX.currentMembers[b.code] ? 1 : 0) - (IDX.currentMembers[a.code] ? 1 : 0) || b.s.total - a.s.total;
       });
-    if (members.length) {
-      h += "<h2>누가 물었나<small>현역 의원을 먼저 보여 줍니다. 이름을 누르면 그 의원의 질의만 봅니다.</small></h2>";
-      h += '<div class="tablebox"><table><thead><tr><th>의원</th>' + ys.map(function (y) { return "<th>" + y + "</th>"; }).join("") + "<th>합계</th></tr></thead><tbody>";
-      members.forEach(function (x) {
-        h += '<tr><td><button class="name" type="button" data-member="' + x.code + '">' + esc(x.s.name) + "</button>" +
-          (IDX.currentMembers[x.code] ? '<span class="badge">현역</span>' : "") + "</td>" +
-          ys.map(function (y) { return "<td>" + (x.s.y[y] || "") + "</td>"; }).join("") + "<td>" + x.s.total + "</td></tr>";
-      });
-      h += "</tbody></table></div>";
-    }
-
-    var tabs = [["check", "조치 점검표"]]
-      .concat(MEMBERS.plans.length ? [["panel", "감사위원"]] : [])
-      .concat(pre.length ? [["pre", "올해 질의 " + pre.length]] : [])
-      .concat(MEMBERS.plans.length ? [["sim", "모의 감사"]] : [])
-      .concat([["topic", "단골 질문"], ["stuck", "막혔던 질문 " + stuck.length], null])
-      .concat(FINDINGS.length ? [["finding", "지적사항 " + findings.length]] : [])
-      .concat([["promise", "약속 답변 " + promises.length], ["request", "자료 요구 " + requests.length], ["all", "문답 전문 " + all.length]]);
-    h += '<div class="tabs" role="tablist">' + tabs.map(function (t) {
-      if (!t) return '<span class="tabsep" aria-hidden="true"></span>';
-      return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (state.tab === t[0]) + '">' + t[1] + "</button>";
-    }).join("") + "</div>";
+    var tabs = [{ g: "준비" }, ["check", "조치 점검표", null]]
+      .concat(MEMBERS.plans.length ? [["panel", "감사위원", null]] : [])
+      .concat(pre.length ? [["pre", "올해 질의", pre.length]] : [])
+      .concat(MEMBERS.plans.length ? [["sim", "모의 감사", null]] : [])
+      .concat([["topic", "단골 질문", null], ["stuck", "막혔던 질문", stuck.length], { g: "기록" }])
+      .concat(FINDINGS.length ? [["finding", "지적사항", findings.length]] : [])
+      .concat([["promise", "약속 답변", promises.length], ["request", "자료 요구", requests.length],
+        ["members", "질의 의원", members.length], ["all", "문답 전문", all.length]]);
+    var viewName = "";
+    $("nav").innerHTML = tabs.map(function (t) {
+      if (t.g) return '<p class="navgroup">' + t.g + "</p>";
+      if (state.tab === t[0]) viewName = t[1];
+      return '<button type="button" data-tab="' + t[0] + '" aria-selected="' + (state.tab === t[0]) + '"><span>' + t[1] + "</span>" +
+        (t[2] === null ? "" : "<small>" + t[2] + "</small>") + "</button>";
+    }).join("");
+    h += '<h3 class="viewtitle">' + viewName + "</h3>";
 
     // 조치 점검표는 한 해씩 본다(기본은 가장 최근 연도).
     var checkYears = {};
@@ -503,7 +558,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       h += '<div class="filters"><select id="fmember" aria-label="의원"><option value="">전체 의원</option>' +
         Object.keys(preAskers).map(function (c) { return '<option value="' + c + '"' + (state.member === c ? " selected" : "") + ">" + esc(preAskers[c]) + "</option>"; }).join("") + "</select>" +
         '<input id="fword" type="search" placeholder="내용에서 찾기 (예: 예산, 민원)" value="' + esc(state.word) + '" aria-label="내용에서 찾기"></div>';
-    } else if (state.tab !== "topic" && state.tab !== "panel" && state.tab !== "sim") h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
+    } else if (["topic", "panel", "sim", "members"].indexOf(state.tab) < 0) h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
       ys.map(function (y) { return '<option value="' + y + '"' + (state.year === y ? " selected" : "") + ">" + y + "년</option>"; }).join("") + "</select>" +
       (state.tab === "finding"
         ? '<select id="fkind" aria-label="조치 구분"><option value="">전체 구분</option>' +
@@ -523,7 +578,16 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       return '<div class="year">' + r.m.year + "년 행정사무감사</div>";
     };
     var plain = false;  // 건수 줄과 '더 보기'를 쓰지 않는 탭
-    if (state.tab === "check") {
+    if (state.tab === "members") {
+      plain = true;
+      body = '<p class="hint">지난 행감에서 이 부서에 질의한 의원입니다. 현역 의원을 먼저 보여 주며, 이름을 누르면 그 의원의 문답만 봅니다.</p>';
+      body += members.length ? '<div class="tablebox"><table><thead><tr><th>의원</th>' + ys.map(function (y) { return "<th>" + y + "</th>"; }).join("") + "<th>합계</th></tr></thead><tbody>" +
+        members.map(function (x) {
+          return '<tr><td><button class="name" type="button" data-member="' + x.code + '">' + esc(x.s.name) + "</button>" +
+            (IDX.currentMembers[x.code] ? '<span class="badge">현역</span>' : "") + "</td>" +
+            ys.map(function (y) { return "<td>" + (x.s.y[y] || "") + "</td>"; }).join("") + "<td>" + x.s.total + "</td></tr>";
+        }).join("") + "</tbody></table></div>" : '<p class="empty">질의 기록이 없습니다.</p>';
+    } else if (state.tab === "check") {
       plain = true;
       var rows = findings.filter(function (f) { return String(f.y) === cy; }).map(function (f) {
         return { id: "f:" + f.y + ":" + hash(f.t), type: f.k || "지적", year: f.y, text: f.t, asked: "",
@@ -614,7 +678,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
           }).join("") + '</select><select id="simmember" aria-label="감사위원">' + sPlan.members.map(function (x) {
             return '<option value="' + x.code + '"' + (x.code === sPm.code ? " selected" : "") + ">" + esc(x.name) + " " + esc(x.role) + "</option>";
           }).join("") + '</select><label class="check"><input type="checkbox" id="simalias"' + (sim.alias ? " checked" : "") + "> 의원 이름을 ‘위원 A’로 바꿔 보내기</label>" +
-          '<button class="printbtn" type="button" id="simstart"' + (sim.busy ? " disabled" : "") + ">" + (started ? "새로 시작" : "모의 감사 시작") + "</button></div>";
+          '<button class="printbtn' + (started ? "" : " primary") + '" type="button" id="simstart"' + (sim.busy ? " disabled" : "") + ">" + (started ? "새로 시작" : "모의 감사 시작") + "</button></div>";
         if (sim.status && !sim.status.configured) body += '<p class="hint">API 키가 설정되지 않았습니다. <code>sim/config.json</code>에 api_key와 model을 넣고 서버를 다시 실행해 주세요.</p>';
         body += '<details class="examples preview"><summary>AI에 보내는 내용 미리보기 (' + sim.prompt.length.toLocaleString() + "자" +
           (sim.status ? " · " + esc(sim.status.service) + (sim.status.model ? " · " + esc(sim.status.model) : "") : "") + ")</summary><pre>" + esc(sim.prompt) + "</pre></details>";
@@ -622,12 +686,12 @@ footer ul { padding-left: 18px; margin: 6px 0; }
         sim.messages.forEach(function (m, i) {
           if (m.role === "system" || i === 1) return;
           var review = m.role === "assistant" && sim.messages[i - 1].content === "강평";
-          body += '<div class="say ' + (m.role === "assistant" ? "m" : "o") + '"><b>' + (review ? "강평 (AI 생성)" : m.role === "assistant" ? role : "내 답변") + "</b>" + esc(m.content) + "</div>";
+          body += '<div class="say ' + (m.role === "assistant" ? "m" : "o") + '"><b>' + (review ? "강평 (AI 생성)" : m.role === "assistant" ? role : "내 답변") + "</b><span class=\"t\">" + esc(m.content) + "</span></div>";
         });
         if (sim.busy) body += '<p class="empty">AI가 답을 쓰는 중입니다…</p>';
-        if (sim.error) body += '<div class="item request"><div class="quote">' + esc(sim.error).replace(/\n/g, "<br>") + '</div><div class="asked">보안 프로그램이 전송을 막은 경우 여기에 그 응답이 표시됩니다. ‘보내는 내용 미리보기’에서 문제가 될 만한 내용을 확인해 주세요.</div><div class="meta"></div></div>';
+        if (sim.error) body += '<div class="item error"><div class="quote">' + esc(sim.error).replace(/\n/g, "<br>") + '</div><div class="asked">보안 프로그램이 전송을 막은 경우 여기에 그 응답이 표시됩니다. ‘보내는 내용 미리보기’에서 문제가 될 만한 내용을 확인해 주세요.</div><div class="meta"></div></div>';
         if (started) body += '<div class="cform wide simbox"><textarea id="simanswer" rows="4" placeholder="답변을 입력하세요"' + (sim.busy ? " disabled" : "") + ">" + esc(sim.draft) + "</textarea>" +
-          '<div class="filters"><button class="printbtn" type="button" id="simsend"' + (sim.busy ? " disabled" : "") + '>답변 보내기</button>' +
+          '<div class="filters"><button class="printbtn primary" type="button" id="simsend"' + (sim.busy ? " disabled" : "") + '>답변 보내기</button>' +
           '<button class="printbtn" type="button" id="simreview"' + (sim.busy ? " disabled" : "") + ">강평 받기</button></div></div>";
         body += '<div id="simend"></div>';
       }
@@ -641,7 +705,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       }).join("") + "</select>" + '<a href="' + SITE + "/common/synap/bbsViewer.do?uid=" + plan.viewer + '" target="_blank" rel="noopener">' + plan.year + "년 감사 계획서 보기</a></div>";
       body += hits.length
         ? '<div class="item"><div class="quote"><strong>올해 감사 일정</strong></div>' + hits.map(function (x) {
-            return '<div class="asked"><b>' + esc(x.pl.name) + "</b> " + esc(x.d.day + " " + x.d.date) + " · " + esc(x.d.text.replace(/\s*\n\s*/g, " ")) + "</div>";
+            return '<div class="asked"><b>' + esc(x.pl.name) + "</b> " + esc(x.d.day + " " + x.d.date) + " · " + esc(planText(x.d.text)) + "</div>";
           }).join("") + '<div class="meta"></div></div>'
         : '<p class="hint">' + plan.year + "년 감사 계획서의 일정표에서 이 부서 이름을 찾지 못했습니다. 소관 위원회를 직접 골라 주세요.</p>";
       body += '<p class="hint">' + esc(plan.name) + " 감사위원 " + plan.members.length + "명입니다. 행감 이력은 2022~2025년 회의록, 5분 자유발언·시정질문·의안은 제10대(올해) 기준입니다.</p>";
@@ -653,7 +717,7 @@ footer ul { padding-left: 18px; margin: 6px 0; }
         var preUs = pre.filter(function (r) { return r.t.m === pm.code; }).length;
         var pairs = function (list) { return list.map(function (x) { return esc(x[0]) + " " + x[1]; }).join(" · "); };
         body += '<div class="item member"><div class="quote"><strong>' + esc(pm.name) + "</strong>" +
-          '<span class="kind k-약속">' + esc(pm.role) + "</span>" + (auditTotal ? "" : '<span class="tag">행감 이력 없음</span>') + "</div>" +
+          '<span class="role">' + esc(pm.role) + "</span>" + (auditTotal ? "" : '<span class="tag">행감 이력 없음</span>') + "</div>" +
           '<div class="asked"><b>우리 부서</b> 지난 행감 질의 ' + toUs + "회 · 올해 회의 질의 " + preUs + "회" +
           (toUs ? ' <button type="button" class="linkbtn" data-member="' + pm.code + '">문답 보기</button>' : "") +
           (preUs ? ' <button type="button" class="linkbtn" data-premember="' + pm.code + '">올해 질의 보기</button>' : "") + "</div>" +
@@ -777,14 +841,14 @@ footer ul { padding-left: 18px; margin: 6px 0; }
       else tslot.innerHTML = render.topicRows[ti].map(function (r) { return threadHtml(r, false); }).join("");
       return;
     }
-    if (el.hasAttribute("data-tab")) { state.tab = el.getAttribute("data-tab"); state.limit = 30; render(); return; }
+    if (el.hasAttribute("data-dept")) { toggleDept(el.getAttribute("data-dept")); return; }
     if (el.hasAttribute("data-premember")) {
       state.member = el.getAttribute("data-premember"); state.tab = "pre"; state.limit = 30; render();
-      out.querySelector(".tabs").scrollIntoView({ behavior: "smooth" }); return;
+      window.scrollTo(0, 0); return;
     }
     if (el.hasAttribute("data-member")) {
       state.member = el.getAttribute("data-member"); state.tab = "all"; state.limit = 30; render();
-      out.querySelector(".tabs").scrollIntoView({ behavior: "smooth" }); return;
+      window.scrollTo(0, 0); return;
     }
     if (el.hasAttribute("data-ctx")) {
       var i = el.getAttribute("data-ctx"), slot = out.querySelector('[data-slot="' + i + '"]');
@@ -825,7 +889,15 @@ footer ul { padding-left: 18px; margin: 6px 0; }
     }, 350);
   });
 
+  $("nav").addEventListener("click", function (e) {
+    var el = e.target.closest("button[data-tab]");
+    if (!el) return;
+    state.tab = el.getAttribute("data-tab"); state.limit = 30; render();
+    if (window.matchMedia("(max-width: 860px)").matches) out.scrollIntoView();
+    else window.scrollTo(0, 0);
+  });
   renderChips();
+  renderHome();
 })();
 </script>
 </body>
