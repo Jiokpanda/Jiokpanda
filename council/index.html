@@ -365,8 +365,8 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
   function simCheck() {
     if (location.protocol === "file:") { sim.ready = false; return; }
     fetch("/api/status").then(function (r) { return r.json(); }).then(function (j) {
-      sim.ready = !!j.ok; sim.status = j; if (state.tab === "sim") render();
-    }).catch(function () { sim.ready = false; if (state.tab === "sim") render(); });
+      sim.ready = !!j.ok; sim.status = j; if (state.tab === "sim" || state.tab === "live") render();
+    }).catch(function () { sim.ready = false; if (state.tab === "sim" || state.tab === "live") render(); });
   }
   // AI에 보내기 전에 의원 실명을 가명으로 바꾸고, 주민번호·전화번호·전자우편 모양의 글자는 지운다.
   function scrub(text, code) {
@@ -419,6 +419,68 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
         sim.busy = false; render();
         var end = document.getElementById("simend"); if (end) end.scrollIntoView({ block: "nearest" });
       });
+  }
+
+  /* ---------- 생중계 받아쓰기 ---------- */
+  // 로컬 서버가 생중계 소리를 음성 인식으로 보내고, 화면은 2초마다 새로 받아쓴 글을 가져온다.
+  var live = { channels: null, loading: false, error: "", url: "", extra: store.get("live:extra"), notify: false,
+    status: "idle", message: "", segments: [], lastId: 0, partial: "", elapsed: 0, audio: 0, timer: null, unseen: 0, max: 0 };
+  function liveChannels() {
+    live.loading = true; live.error = "";
+    fetch("/api/live/channels").then(function (r) { return r.json(); }).then(function (j) {
+      live.channels = j.channels || []; live.ffmpeg = j.ffmpeg; live.error = j.error || "";
+      var on = live.channels.filter(function (c) { return c.url; });
+      if (!live.url && on.length) live.url = on[0].url;
+    }).catch(function (e) { live.channels = []; live.error = String(e); })
+      .then(function () { live.loading = false; if (state.tab === "live") render(); });
+  }
+  function liveTerms() {
+    var terms = [];
+    Object.keys(selected).forEach(function (d) { terms.push(d); if (d.indexOf("구청") > 0) terms.push(d.replace("구청", "구")); });
+    live.extra.split(/[,\n]/).forEach(function (t) { if (t.trim()) terms.push(t.trim()); });
+    return terms;
+  }
+  function liveTick() {
+    fetch("/api/live/state?after=" + live.lastId).then(function (r) { return r.json(); }).then(function (j) {
+      var changed = j.status !== live.status || j.message !== live.message || (j.segments || []).length > 0;
+      (j.segments || []).forEach(function (g) {
+        live.segments.push(g);
+        if (g.hits.length || g.request) {
+          if (state.tab !== "live" || document.hidden) live.unseen++;
+          if (live.notify && g.hits.length && window.Notification && Notification.permission === "granted") {
+            new Notification("우리 부서 언급: " + g.hits.join(", "), { body: g.text.slice(0, 120) });
+          }
+        }
+      });
+      live.status = j.status; live.message = j.message || ""; live.lastId = j.last_id || live.lastId;
+      live.partial = j.partial || ""; live.elapsed = j.elapsed || 0; live.audio = j.audio_seconds || 0; live.source = j.source;
+      document.title = (live.unseen ? "(" + live.unseen + ") " : "") + "행감 대비 브리핑";
+      if (j.status !== "running" && j.status !== "starting") { clearInterval(live.timer); live.timer = null; }
+      if (state.tab !== "live") return;
+      if (changed) render();
+      else {
+        var el = $("livepartial"); if (el) el.textContent = live.partial;
+        var st = $("livestatus"); if (st) st.textContent = liveStatusText();
+      }
+    }).catch(function () {});
+  }
+  function clock(sec) { return Math.floor(sec / 60) + "분 " + (sec % 60) + "초"; }
+  function liveStatusText() {
+    if (live.status === "running") return "받아쓰는 중 · 켠 지 " + clock(live.elapsed) + " · 처리한 소리 " + clock(live.audio);
+    if (live.status === "starting") return live.message || "연결하는 중입니다…";
+    if (live.status === "error") return "멈춤: " + live.message;
+    if (live.status === "stopped") return "멈췄습니다. " + live.message;
+    return "";
+  }
+  function liveSegment(g) {
+    var text = esc(g.text);
+    g.hits.forEach(function (h) {
+      // 받아쓴 글에는 띄어쓰기가 섞이므로 글자 사이 공백을 허용해 표시한다
+      var re = new RegExp(h.replace(/\s/g, "").split("").map(function (c) { return c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("\\s*"), "g");
+      text = text.replace(re, function (m) { return "<mark>" + m + "</mark>"; });
+    });
+    return '<div class="say o"><b>' + esc(g.time) + (g.speaker ? " · 화자 " + esc(g.speaker) : "") + '</b><span class="t">' +
+      (g.request ? '<span class="kind k-시정">자료 요구</span>' : "") + text + "</span></div>";
   }
 
   /* ---------- 브리핑 만들기 ---------- */
@@ -528,6 +590,7 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
       .concat(MEMBERS.plans.length ? [["panel", "감사위원", null]] : [])
       .concat(pre.length ? [["pre", "올해 질의", pre.length]] : [])
       .concat(MEMBERS.plans.length ? [["sim", "모의 감사", null]] : [])
+      .concat([["live", "생중계", live.unseen || null]])
       .concat([["topic", "단골 질문", null], ["stuck", "막혔던 질문", stuck.length], { g: "기록" }])
       .concat(FINDINGS.length ? [["finding", "지적사항", findings.length]] : [])
       .concat([["promise", "약속 답변", promises.length], ["request", "자료 요구", requests.length],
@@ -558,7 +621,7 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
       h += '<div class="filters"><select id="fmember" aria-label="의원"><option value="">전체 의원</option>' +
         Object.keys(preAskers).map(function (c) { return '<option value="' + c + '"' + (state.member === c ? " selected" : "") + ">" + esc(preAskers[c]) + "</option>"; }).join("") + "</select>" +
         '<input id="fword" type="search" placeholder="내용에서 찾기 (예: 예산, 민원)" value="' + esc(state.word) + '" aria-label="내용에서 찾기"></div>';
-    } else if (["topic", "panel", "sim", "members"].indexOf(state.tab) < 0) h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
+    } else if (["topic", "panel", "sim", "members", "live"].indexOf(state.tab) < 0) h += '<div class="filters"><select id="fyear" aria-label="연도"><option value="">전체 연도</option>' +
       ys.map(function (y) { return '<option value="' + y + '"' + (state.year === y ? " selected" : "") + ">" + y + "년</option>"; }).join("") + "</select>" +
       (state.tab === "finding"
         ? '<select id="fkind" aria-label="조치 구분"><option value="">전체 구분</option>' +
@@ -642,6 +705,45 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
           (x.ours.length ? '<div class="meta"><button type="button" data-topic="' + x.i + '">우리 부서가 받은 문답 ' + x.ours.length + "건 보기</button></div>" +
             '<div data-tslot="' + x.i + '"></div>' : "") + "</div>";
       });
+    } else if (state.tab === "live") {
+      plain = true;
+      live.unseen = 0; document.title = "행감 대비 브리핑";
+      body = '<p class="hint">의회 생중계의 소리를 실시간으로 받아써서, 우리 부서가 언급되거나 자료 요구가 나오면 알려 줍니다. ' +
+        "영상과 소리는 저장하지 않고 받아쓴 글자만 이 화면에 둡니다. 켜 둔 시간만큼 음성 인식 크레딧이 차감됩니다.</p>";
+      if (sim.ready === null) { simCheck(); body += '<p class="empty">연결을 확인하는 중입니다…</p>'; }
+      if (sim.ready === false) {
+        body += '<div class="item"><div class="quote"><strong>생중계 받아쓰기는 로컬 서버로 열어야 합니다</strong></div>' +
+          '<div class="asked">1. <code>sim/config.example.json</code>을 <code>sim/config.json</code>으로 복사하고 API 키를 넣습니다.</div>' +
+          '<div class="asked">2. 이 폴더에서 <code>python sim/server.py</code>를 실행합니다.</div>' +
+          '<div class="asked">3. 브라우저에서 <code>http://127.0.0.1:8765</code>를 엽니다.</div><div class="meta"></div></div>';
+      } else if (sim.ready) {
+        if (!live.channels && !live.loading) liveChannels();
+        var busy = live.status === "running" || live.status === "starting";
+        var onAir = (live.channels || []).filter(function (c) { return c.url; });
+        body += '<div class="filters"><select id="livechannel" aria-label="방송"' + (busy ? " disabled" : "") + ">" +
+          (onAir.length ? onAir.map(function (c) { return '<option value="' + esc(c.url) + '"' + (c.url === live.url ? " selected" : "") + ">" + esc(c.name) + "</option>"; }).join("")
+            : "<option value=\"\">" + (live.loading || !live.channels ? "방송 목록을 읽는 중…" : "지금 방송 중인 회의가 없습니다") + "</option>") + "</select>" +
+          (busy ? '<button class="printbtn" type="button" id="livestop">멈추기</button>'
+            : '<button class="printbtn primary" type="button" id="livestart"' + (onAir.length ? "" : " disabled") + '>받아쓰기 시작</button>' +
+              '<button class="printbtn" type="button" id="livereload">방송 목록 새로 고침</button>') +
+          '<label class="check"><input type="checkbox" id="livenotify"' + (live.notify ? " checked" : "") + "> 부서 언급 시 알림 띄우기</label></div>";
+        if (live.error) body += '<div class="item error"><div class="quote">' + esc(live.error) + '</div><div class="meta"></div></div>';
+        body += '<div class="cform wide"><textarea id="liveextra" rows="1" placeholder="더 지켜볼 낱말 (쉼표로 구분. 예: 스마트도서관, 유림도서관)"' + (busy ? " disabled" : "") +
+          ' aria-label="더 지켜볼 낱말">' + esc(live.extra) + "</textarea></div>" +
+          '<p class="count">지켜보는 낱말: ' + esc(liveTerms().join(", ") || "없음") + "</p>" +
+          '<p class="count" id="livestatus">' + esc(liveStatusText()) + "</p>";
+        var mentions = live.segments.filter(function (g) { return g.hits.length; });
+        var asks = live.segments.filter(function (g) { return g.request; });
+        if (live.segments.length) {
+          body += '<div class="year">우리 부서 언급 ' + mentions.length + "건</div>" +
+            (mentions.length ? mentions.slice().reverse().map(liveSegment).join("") : '<p class="empty">아직 없습니다.</p>') +
+            '<div class="year">자료 요구 ' + asks.length + "건 (전체 부서)</div>" +
+            (asks.length ? asks.slice().reverse().map(liveSegment).join("") : '<p class="empty">아직 없습니다.</p>') +
+            '<div class="year">받아쓴 글 (최근 것부터)</div><p class="count" id="livepartial">' + esc(live.partial) + "</p>" +
+            live.segments.slice(-150).reverse().map(liveSegment).join("") +
+            '<div class="filters"><button class="printbtn" type="button" id="livesave">받아쓴 글 저장(.txt)</button></div>';
+        } else if (busy) body += '<p class="count" id="livepartial">' + esc(live.partial) + "</p>";
+      }
     } else if (state.tab === "sim") {
       plain = true;
       body = '<p class="hint"><strong>실제 의원의 발언이 아닙니다.</strong> 공개 회의록의 질의 경향을 참고해 AI가 만드는 연습용 질의입니다. 내부 준비용으로만 쓰고, 답변에는 개인정보나 비공개 자료를 적지 마세요.</p>';
@@ -822,6 +924,26 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
     }
     if (el.id === "more") { state.limit += 50; render(); return; }
     if (el.id === "csv") { exportCsv(); return; }
+    if (el.id === "livereload") { live.channels = null; render(); return; }
+    if (el.id === "livestart") {
+      var names = Object.keys(IDX.currentMembers).map(function (c) { return IDX.currentMembers[c]; });
+      live.segments = []; live.lastId = 0; live.partial = ""; live.status = "starting"; live.message = "";
+      fetch("/api/live/start", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: live.url, name: ($("livechannel").selectedOptions[0] || {}).text || "", terms: liveTerms(), hints: liveTerms().concat(names) }) })
+        .then(function (r) { return r.json(); }).then(function (j) {
+          if (j.error) { live.status = "error"; live.message = j.error; render(); return; }
+          if (!live.timer) live.timer = setInterval(liveTick, 2000);
+        }).catch(function (e) { live.status = "error"; live.message = String(e); render(); });
+      render(); return;
+    }
+    if (el.id === "livestop") { fetch("/api/live/stop", { method: "POST" }).then(liveTick); return; }
+    if (el.id === "livesave") {
+      var lines = live.segments.map(function (g) { return "[" + g.time + "] " + (g.speaker ? "화자 " + g.speaker + ": " : "") + g.text; });
+      var blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/plain;charset=utf-8" });
+      var link = document.createElement("a");
+      link.href = URL.createObjectURL(blob); link.download = "live-transcript.txt";
+      document.body.appendChild(link); link.click(); link.parentNode.removeChild(link); return;
+    }
     if (el.id === "simstart") {
       sim.draft = ""; sim.error = "";
       sim.messages = [{ role: "system", content: sim.prompt }, { role: "user", content: "감사를 시작해 주세요." }];
@@ -870,6 +992,13 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
   out.addEventListener("change", function (e) {
     if (saveField(e.target)) return;
     if (e.target.id === "fyear") { state.year = e.target.value; state.limit = 30; render(); }
+    if (e.target.id === "livechannel") { live.url = e.target.value; return; }
+    if (e.target.id === "livenotify") {
+      live.notify = e.target.checked;
+      if (live.notify && window.Notification && Notification.permission === "default") Notification.requestPermission();
+      return;
+    }
+    if (e.target.id === "liveextra") { live.extra = e.target.value; store.set("live:extra", live.extra); render(); return; }
     if (e.target.id === "fcommittee") { state.committee = e.target.value; sim.member = ""; sim.messages = []; render(); }
     if (e.target.id === "simmember") { sim.member = e.target.value; sim.messages = []; sim.error = ""; render(); }
     if (e.target.id === "simalias") { sim.alias = e.target.checked; sim.messages = []; render(); }
