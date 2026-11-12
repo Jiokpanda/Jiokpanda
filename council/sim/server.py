@@ -32,6 +32,10 @@ DEFAULTS = {
     "chat_path": "/chat/completions/",
     "models_path": "/models/?type=llm",
     "stt_path": "/soniox/transcribe-websocket",
+    "rerank_path": "/rerank/",
+    "rerank_model": "qwen3-rerank",
+    "rerank_candidates": 40,        # AI로 다시 고를 때 보내는 후보 대목 수
+    "expand_query": True,           # AI로 다시 고를 때 검색어를 먼저 넓힐지(질문만 전송)
     "materials_dir": "materials",   # 답변 자료 폴더(council 폴더 기준 상대 경로 또는 전체 경로)
     "live_max_minutes": 240,   # 생중계 받아쓰기를 켜 둘 수 있는 최대 시간(크레딧 보호)
     "api_key": "",
@@ -52,6 +56,15 @@ def materials(cfg):
         INDEX["docs"] = docs.Index(folder, cache_dir=ROOT / ".cache" / "materials")
         INDEX["docs"].start()          # 뒤에서 읽는다. 화면은 진행 상황을 물어 가며 기다린다.
     return INDEX["docs"]
+
+
+def loaded(index, seconds=20):
+    """자료를 처음 읽는 중이면 끝날 때까지(최대 seconds초) 기다렸다가 돌려준다."""
+    import time
+    until = time.time() + seconds
+    while index.loading and not index.chunks and time.time() < until:
+        time.sleep(0.2)
+    return index
 
 
 def load_config():
@@ -144,7 +157,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
-        if path not in ("/api/chat", "/api/live/start", "/api/live/stop", "/api/docs/reload", "/api/docs/search", "/api/docs/answer", "/api/live/audio"):
+        if path not in ("/api/chat", "/api/live/start", "/api/live/stop", "/api/docs/reload", "/api/docs/search", "/api/docs/refine", "/api/docs/answer", "/api/live/audio"):
             return self.send_error(404)
         if not self.local_only():
             return self.send_json({"error": "이 PC에서 연 화면의 요청만 받습니다."}, 403)
@@ -168,7 +181,34 @@ class Handler(SimpleHTTPRequestHandler):
         if not isinstance(body, dict):
             return self.send_json({"error": "요청 형식이 올바르지 않습니다."}, 400)
         if path == "/api/docs/search":
-            return self.send_json({"results": materials(cfg).search(str(body.get("q") or ""), int(body.get("k") or 5))})
+            return self.send_json({"results": loaded(materials(cfg)).search(str(body.get("q") or ""), int(body.get("k") or 5))})
+        if path == "/api/docs/refine":
+            # 화면에서 AI를 켠 경우에만 호출된다. ① 질문으로 검색어를 넓히고 ② 넓게 찾은 후보를 재정렬 모델로 다시 고른다.
+            if not cfg["api_key"]:
+                return self.send_json({"error": "sim/config.json 에 api_key 를 넣어 주세요."}, 400)
+            q, index, terms, note = str(body.get("q") or "")[:1000], loaded(materials(cfg)), [], ""
+            if cfg["expand_query"] and cfg["model"]:
+                ask = ("다음 질문의 답이 적혀 있을 내부 문서(현황 보고, 통계표, 계획서, 규정)에 실제로 쓰였을 법한 낱말을 "
+                       "8개 이내로, 쉼표로만 구분해 적어 주세요. 설명은 쓰지 않습니다.\n질문: " + q)
+                status, raw = call_api(cfg, cfg["chat_path"], {"model": cfg["model"], "messages": [{"role": "user", "content": ask}]})
+                try:
+                    text = json.loads(raw)["choices"][0]["message"]["content"]
+                    terms = [t.strip(" .·-\"'") for t in re.split(r"[,\n]", text) if 1 < len(t.strip()) <= 20][:10]
+                except (ValueError, KeyError, IndexError, TypeError):
+                    note = f"검색어 넓히기 실패(응답 코드 {status})"
+            found = index.search(q, int(cfg["rerank_candidates"]), extra=terms, cutoff=0)
+            if len(found) > 1:
+                texts = [(c["file"].rsplit("/", 1)[-1] + " | " + (c["title"] + " | " if c["title"] and c["title"] not in c["text"] else "") + c["text"])[:1500] for c in found]
+                status, raw = call_api(cfg, cfg["rerank_path"], {"model": cfg["rerank_model"], "query": q, "documents": texts, "top_n": 5})
+                try:
+                    order = json.loads(raw).get("results") or []
+                    picked = [dict(found[int(r["index"])], relevance=round(float(r.get("relevance_score", 0)), 2)) for r in order]
+                    if picked:
+                        return self.send_json({"results": picked, "terms": terms, "reranked": True, "sent": len(texts), "note": note})
+                    note = (note + " " if note else "") + "재정렬 결과가 비어 있습니다."
+                except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+                    note = (note + " " if note else "") + f"재정렬 실패(응답 코드 {status}): {raw[:200]}"
+            return self.send_json({"results": found[:5], "terms": terms, "reranked": False, "sent": 0, "note": note})
         if path == "/api/docs/answer":
             # 화면에서 'AI로 답변 요지 만들기'를 켠 경우에만 호출된다. 찾은 대목만 AI 서비스로 보낸다.
             if not cfg["api_key"] or not cfg["model"]:

@@ -247,6 +247,29 @@ NOTES = {".hwp": "구형 HWP는 읽지 못합니다. 한글에서 HWPX로 다시
 
 # ---------- 찾기 ----------
 
+# 질문에서 '묻는 말투'는 답이 든 대목을 찾는 데 방해만 된다. (설문 문항처럼 말투가 같은 대목이 걸려 나온다.)
+ASK_WORDS = re.compile(
+    r"얼마나|얼마|어떻게|어느 ?정도|무엇|무슨|어떤|언제|어디|왜|몇|"
+    r"됩니까|입니까|습니까|합니까|십니까|나요|인가요|는지요|인지요|지요|"
+    r"말씀해 ?주\S*|답변해 ?주\S*|설명해 ?주\S*|알려 ?주\S*|주시기 ?바랍니다|주십시오|주세요|"
+    r"과장님|국장님|소장님|팀장님|위원장님|그러면|그런데|그래서|혹시|지금|현재|관련해서|대해서|대하여|있는지|되는지|하는지")
+# 같은 뜻으로 섞여 쓰이는 낱말. 질문에 하나가 나오면 나머지도 함께 찾는다.
+SYNONYMS = [
+    ("사용자", "이용자", "가입자", "사용 인원", "이용 인원", "접속자", "계정"),
+    ("예산", "사업비", "소요액", "소요예산", "예산액"),
+    ("실적", "현황", "통계", "추이"),
+    ("비용", "금액", "요금", "단가"),
+    ("직원", "공무원", "인력"),
+    ("만족도", "만족"),
+    ("집행률", "집행액", "집행 현황"),
+    ("민원", "불편", "건의"),
+    ("교육", "연수", "수료"),
+    ("계획", "방안", "대책"),
+]
+WANTS_NUMBER = re.compile(r"얼마|몇|수는|수가|현황|규모|비율|률|금액|예산|건수|인원|통계|실적")
+LOOKS_LIKE_QUESTION = re.compile(r"\?|십니까|습니까|입니까|주십시오|선택해 ?주")
+HAS_FIGURE = re.compile(r"\d[\d,.]*\s*(명|건|원|천원|백만원|억|%|％|회|개|곳|대|권|시간|일|년|월)")
+
 def grams(text):
     """한글은 띄어쓰기와 조사가 제각각이라 두 글자씩 겹쳐 자른 조각으로 맞춘다."""
     out = []
@@ -265,6 +288,7 @@ class Index:
         self.lock = threading.Lock()
         self.chunks, self.files = [], []
         self.posting, self.lengths, self.average = {}, [], 1.0
+        self.asking, self.figures, self.same = [], [], []     # 대목별: 질문 모양인지, 수치가 몇 개인지, 같은 내용 묶음
         self.loading, self.progress, self.seconds = False, {"done": 0, "total": 0, "current": ""}, 0.0
 
     def start(self):
@@ -367,15 +391,21 @@ class Index:
                 chunks += results[name]
             elif name in notes:
                 files.append({"name": name, "chunks": 0, "error": notes[name]})
-        posting, lengths = defaultdict(list), []
+        posting, lengths, asking, figures, same = defaultdict(list), [], [], [], []
         for i, c in enumerate(chunks):
-            counts = Counter(grams(c["title"] + " " + c["text"]))
+            name = c["file"].rsplit("/", 1)[-1].rsplit(".", 1)[0]          # 파일 이름도 찾는 대상에 넣는다
+            counts = Counter(grams(name + " " + c["title"] + " " + c["text"]))
             lengths.append(sum(counts.values()))
             for g, n in counts.items():
                 posting[g].append((i, n))
+            marks, nums = len(LOOKS_LIKE_QUESTION.findall(c["text"])), len(HAS_FIGURE.findall(c["text"]))
+            asking.append(marks >= 1 and nums <= marks)           # 물음만 있고 수치는 거의 없는 대목(설문지 등)
+            figures.append(nums)
+            same.append(re.sub(r"\s", "", c["text"])[:160])
         with self.lock:
             self.chunks, self.files = chunks, files
             self.posting, self.lengths = dict(posting), lengths
+            self.asking, self.figures, self.same = asking, figures, same
             self.average = (sum(lengths) / len(lengths)) if lengths else 1.0
             self.loading, self.seconds = False, round(time.time() - began, 1)
         return self.status()
@@ -385,12 +415,31 @@ class Index:
             return {"folder": str(self.folder), "exists": self.folder.is_dir(), "files": self.files, "chunks": len(self.chunks),
                     "loading": self.loading, "progress": dict(self.progress), "seconds": self.seconds}
 
-    def search(self, query, k=5):
-        """질문과 가장 관련 있는 대목을 돌려준다. 질문의 끝부분(실제 물음)에 무게를 더 둔다."""
+    def search(self, query, k=5, extra=(), cutoff=0.3):
+        """질문에 답이 될 만한 대목을 돌려준다.
+
+        질문의 말투는 떼고 내용 낱말만으로 찾되, 같은 뜻의 낱말도 함께 찾는다. 물음만 있는 대목(설문 문항 등)은
+        뒤로 보내고, 수치를 묻는 질문이면 수치가 든 대목을 앞세운다. 내용이 같은 대목은 하나만 남긴다.
+        extra에는 추가로 찾을 낱말(예: AI가 넓혀 준 검색어)을 넣는다.
+        cutoff는 1위 점수의 이 비율에 못 미치는 대목을 버리는 기준이다(재정렬용 후보를 넓게 뽑을 때는 0).
+        """
         query = squeeze(query)
-        weights = Counter(grams(query))
-        for g in grams(query[-80:]):
-            weights[g] += 1
+        core = squeeze(ASK_WORDS.sub(" ", query)) or query
+        weights = Counter()
+        for g in grams(core):
+            weights[g] += 1.0
+        for g in grams(core[-60:]):                  # 끝부분이 실제 물음인 경우가 많다
+            weights[g] += 0.5
+        flat = re.sub(r"\s", "", core)
+        for group in SYNONYMS:
+            if any(re.sub(r"\s", "", w) in flat for w in group):
+                for w in group:
+                    for g in grams(w):
+                        weights[g] = max(weights[g], 0.7)
+        for term in extra:
+            for g in grams(str(term)):
+                weights[g] = max(weights[g], 0.8)
+        wants_number = bool(WANTS_NUMBER.search(query))
         with self.lock:
             total, scores = len(self.chunks), defaultdict(float)
             for g, w in weights.items():
@@ -400,6 +449,21 @@ class Index:
                 idf = math.log(1 + (total - len(hits) + 0.5) / (len(hits) + 0.5))
                 for i, n in hits:
                     scores[i] += w * idf * n * 2.2 / (n + 1.2 * (0.25 + 0.75 * self.lengths[i] / self.average))
-            best = sorted(scores.items(), key=lambda kv: -kv[1])[:k]
-            top = best[0][1] if best else 0
-            return [dict(self.chunks[i], score=round(s, 2), id=i) for i, s in best if s >= top * 0.35]
+            for i in scores:
+                scores[i] *= 1.0 + min(self.figures[i], 4) * (0.12 if wants_number else 0.05)
+                if self.asking[i]:
+                    scores[i] *= 0.4
+            out, seen = [], {}
+            for i, sc in sorted(scores.items(), key=lambda kv: -kv[1]):
+                key = self.same[i]
+                if key in seen:                      # 같은 내용이 여러 파일에 있으면 처음 것에 파일 수만 더한다
+                    seen[key]["copies"] += 1
+                    continue
+                if out and sc < out[0]["score"] * cutoff:
+                    break
+                item = dict(self.chunks[i], score=round(sc, 2), id=i, copies=0)
+                seen[key] = item
+                out.append(item)
+                if len(out) >= k:
+                    break
+            return out
