@@ -38,7 +38,7 @@ HIDDEN = ("/sim/config", "/.cache", "/.git")   # 화면으로 내주지 않는 �
 def load_config():
     cfg = dict(DEFAULTS)
     if CONFIG_PATH.exists():
-        cfg.update(json.loads(CONFIG_PATH.read_text(encoding="utf-8")))
+        cfg.update(json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig")))  # 메모장이 붙이는 BOM 허용
     for key, env in (("api_key", "FACTCHAT_API_KEY"), ("base_url", "FACTCHAT_BASE_URL"), ("model", "FACTCHAT_MODEL")):
         if os.environ.get(env):
             cfg[key] = os.environ[env]
