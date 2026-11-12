@@ -431,7 +431,9 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
       .then(function (j) { mat.status = j; }).catch(function () { mat.status = { files: [], chunks: 0, exists: false, folder: "" }; })
       .then(function () {
         mat.loading = !!mat.status.loading;
-        if (mat.loading) setTimeout(function () { matStatus(false); }, 1000);     // 다 읽을 때까지 1초마다 진행 상황을 묻는다
+        var building = !!(mat.status.embed && mat.status.embed.building);
+        if (mat.loading || building) setTimeout(function () { matStatus(false); }, 1000);   // 끝날 때까지 1초마다 진행 상황을 묻는다
+        if (state.tab === "docs" && building && $("embedprogress")) { $("embedprogress").textContent = matEmbedText(); return; }
         if (state.tab === "docs" && mat.loading && $("docprogress")) { $("docprogress").textContent = matProgress(); return; }
         if (state.tab === "docs" || state.tab === "live") render();
       });
@@ -440,6 +442,14 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
     var pr = (mat.status && mat.status.progress) || { done: 0, total: 0, current: "" };
     if (!pr.total) return "자료 폴더의 파일을 확인하는 중입니다…";
     return "자료를 읽는 중입니다 · " + pr.done + " / " + pr.total + (pr.current ? " · " + pr.current : "") + " (처음 한 번만 오래 걸리고, 다음부터는 바뀐 파일만 읽습니다)";
+  }
+  function matEmbedText() {
+    var em = (mat.status && mat.status.embed) || {};
+    if (em.building) return "임베딩 색인을 만드는 중입니다 · " + em.done + " / " + em.total + (em.skipped ? " · 건너뜀 " + em.skipped : "");
+    if (!em.model) return "";
+    var total = mat.status.chunks || 0;
+    return "뜻으로 찾기(임베딩 색인): " + (em.have ? "대목 " + total + "개 중 " + em.have + "개 준비됨 · " + em.model : "아직 만들지 않음") +
+      (em.error ? " · 마지막 오류: " + em.error : "");
   }
   function matSearch(q, done) {
     fetch("/api/docs/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: q, k: 5 }) })
@@ -472,7 +482,7 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
     return results.map(function (x, i) {
       return '<div class="item"><div class="quote t">' + markWords(x.text, q) + "</div>" +
         '<div class="meta"><span>[' + (i + 1) + "] " + esc(x.file) + "</span><span>" + esc(x.loc) + "</span>" +
-        (x.copies ? "<span>같은 내용 " + x.copies + "곳 더</span>" : "") + (x.relevance !== undefined ? "<span>관련도 " + x.relevance + "</span>" : "") +
+        (x.via ? "<span>" + esc(x.via) + "로 찾음</span>" : "") + (x.copies ? "<span>같은 내용 " + x.copies + "곳 더</span>" : "") + (x.relevance !== undefined ? "<span>관련도 " + x.relevance + "</span>" : "") +
         (x.title && x.text.indexOf(x.title) < 0 ? "<span>" + esc(x.title) + "</span>" : "") + "</div></div>";
     }).join("");
   }
@@ -835,6 +845,14 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
           (bad.length ? " · 읽지 못한 파일 " + bad.length + "개" : "") + (ms.seconds && !mat.loading ? " · 읽는 데 " + ms.seconds + "초" : "") + '</span><button class="printbtn" type="button" id="docreload"' + (mat.loading ? " disabled" : "") + ">자료 다시 읽기</button></div>";
         if (mat.status && !ms.chunks && !mat.loading) body += '<div class="item"><div class="quote"><strong>자료 폴더가 비어 있습니다</strong></div>' +
           '<div class="asked">위 폴더에 HWPX, PDF, 엑셀(xlsx), CSV, 글 파일을 넣고 ‘자료 다시 읽기’를 누르세요. 하위 폴더도 함께 읽습니다.</div><div class="meta"></div></div>';
+        var em = ms.embed || {};
+        if (ms.chunks && em.model) {
+          body += '<div class="filters"><span class="count" id="embedprogress">' + esc(matEmbedText()) + "</span>" +
+            (em.building ? "" : '<button class="printbtn" type="button" id="docembed"' + (em.have >= ms.chunks ? " disabled" : "") + ">" +
+              (em.have ? "새 대목 색인에 추가" : "임베딩 색인 만들기") + "</button>" +
+              (em.have ? '<button class="printbtn" type="button" id="docembedclear">색인 지우기</button>' : "")) + "</div>" +
+            (em.have ? '<p class="count">임베딩 색인을 쓰는 동안에는 찾을 때마다 질문이 팩트챗으로 전송됩니다.</p>' : "");
+        }
         if (ms.files.length) body += '<details class="examples"><summary>파일 목록</summary>' + ms.files.map(function (f) {
           return '<div class="ex">' + esc(f.name) + '<div class="meta"><span' + (f.error ? ' class="warn"' : "") + ">" + (f.error ? esc(f.error) : "대목 " + f.chunks + "개") + "</span></div></div>";
         }).join("") + "</details>";
@@ -1077,6 +1095,20 @@ footer ul { padding-left: 18px; margin: 6px 0 0; }
     if (el.id === "more") { state.limit += 50; render(); return; }
     if (el.id === "csv") { exportCsv(); return; }
     if (el.id === "docreload") { matStatus(true); render(); return; }
+    if (el.id === "docembed") {
+      var n = (mat.status.chunks || 0) - ((mat.status.embed || {}).have || 0);
+      if (!window.confirm("자료의 대목 " + n + "개가 팩트챗(임베딩 모델)으로 전송됩니다.\n비공개 자료가 들어 있다면 전송해도 되는지 먼저 확인하세요.\n\n계속할까요?")) return;
+      fetch("/api/docs/embed", { method: "POST" }).then(function (r) { return r.json(); }).then(function (j) {
+        if (j.error) { window.alert(j.error); return; }
+        mat.status = j; mat.loading = false; render(); matStatus(false);
+      });
+      return;
+    }
+    if (el.id === "docembedclear") {
+      if (!window.confirm("이 PC에 저장된 임베딩 색인을 지웁니다. 계속할까요?")) return;
+      fetch("/api/docs/embed-clear", { method: "POST" }).then(function (r) { return r.json(); }).then(function (j) { mat.status = j; render(); });
+      return;
+    }
     if (el.id === "docsearch") {
       mat.q = ($("docq").value || "").trim();
       if (!mat.q) return;

@@ -32,6 +32,9 @@ DEFAULTS = {
     "chat_path": "/chat/completions/",
     "models_path": "/models/?type=llm",
     "stt_path": "/soniox/transcribe-websocket",
+    "embed_path": "/embeddings/",
+    "embed_model": "text-embedding-3-small",   # 뜻으로 찾기용 임베딩 모델(게이트웨이 모델 목록에 있는 이름)
+    "embed_dimensions": 512,                   # 벡터 크기. 모델이 받지 않으면 0으로 둔다
     "rerank_path": "/rerank/",
     "rerank_model": "qwen3-rerank",
     "rerank_candidates": 40,        # AI로 다시 고를 때 보내는 후보 대목 수
@@ -53,9 +56,35 @@ def materials(cfg):
     folder = Path(cfg["materials_dir"])
     folder = folder if folder.is_absolute() else ROOT / folder
     if INDEX["docs"] is None or INDEX["docs"].folder != folder:
-        INDEX["docs"] = docs.Index(folder, cache_dir=ROOT / ".cache" / "materials")
+        INDEX["docs"] = docs.Index(folder, cache_dir=ROOT / ".cache" / "materials", embed_model=cfg["embed_model"])
         INDEX["docs"].start()          # 뒤에서 읽는다. 화면은 진행 상황을 물어 가며 기다린다.
     return INDEX["docs"]
+
+
+def embed_texts(cfg, texts):
+    """글 목록을 게이트웨이의 임베딩 모델로 보내 벡터 목록을 받는다."""
+    payload = {"model": cfg["embed_model"], "input": texts}
+    if cfg["embed_dimensions"]:
+        payload["dimensions"] = int(cfg["embed_dimensions"])
+    status, raw = call_api(cfg, cfg["embed_path"], payload)
+    try:
+        data = sorted(json.loads(raw)["data"], key=lambda d: d.get("index", 0))
+        vecs = [d["embedding"] for d in data]
+        if status == 200 and len(vecs) == len(texts):
+            return vecs
+    except (ValueError, KeyError, TypeError):
+        pass
+    raise docs.EmbedError(status, raw[:300])
+
+
+def question_vector(cfg, index, q):
+    """임베딩 색인이 있을 때만 질문을 벡터로 바꾼다(질문이 게이트웨이로 전송된다). 실패하면 낱말로만 찾는다."""
+    if not index.rows or not cfg["api_key"]:
+        return None
+    try:
+        return embed_texts(cfg, [q[:1000]])[0]
+    except docs.EmbedError:
+        return None
 
 
 def loaded(index, seconds=20):
@@ -157,7 +186,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
-        if path not in ("/api/chat", "/api/live/start", "/api/live/stop", "/api/docs/reload", "/api/docs/search", "/api/docs/refine", "/api/docs/answer", "/api/live/audio"):
+        if path not in ("/api/chat", "/api/live/start", "/api/live/stop", "/api/docs/reload", "/api/docs/search", "/api/docs/refine", "/api/docs/answer", "/api/live/audio",
+                        "/api/docs/embed", "/api/docs/embed-clear"):
             return self.send_error(404)
         if not self.local_only():
             return self.send_json({"error": "이 PC에서 연 화면의 요청만 받습니다."}, 403)
@@ -170,6 +200,17 @@ class Handler(SimpleHTTPRequestHandler):
             index = materials(cfg)
             index.start()
             return self.send_json(index.status())
+        if path == "/api/docs/embed":
+            # 화면에서 확인을 거쳐 눌렀을 때만 온다. 벡터가 없는 대목 전부가 게이트웨이로 전송된다.
+            if not cfg["api_key"]:
+                return self.send_json({"error": "sim/config.json 에 api_key 를 넣어 주세요."}, 400)
+            index = loaded(materials(cfg))
+            index.embed_start(lambda texts: embed_texts(cfg, texts))
+            return self.send_json(index.status())
+        if path == "/api/docs/embed-clear":
+            index = materials(cfg)
+            index.embed_clear()
+            return self.send_json(index.status())
         if path == "/api/live/audio":                      # 마이크 소리 조각(글자가 아니라 소리 그대로)
             length = int(self.headers.get("Content-Length") or 0)
             data = self.rfile.read(length) if 0 < length <= MAX_BODY else b""
@@ -181,7 +222,8 @@ class Handler(SimpleHTTPRequestHandler):
         if not isinstance(body, dict):
             return self.send_json({"error": "요청 형식이 올바르지 않습니다."}, 400)
         if path == "/api/docs/search":
-            return self.send_json({"results": loaded(materials(cfg)).search(str(body.get("q") or ""), int(body.get("k") or 5))})
+            index, q = loaded(materials(cfg)), str(body.get("q") or "")
+            return self.send_json({"results": index.search(q, int(body.get("k") or 5), qvec=question_vector(cfg, index, q))})
         if path == "/api/docs/refine":
             # 화면에서 AI를 켠 경우에만 호출된다. ① 질문으로 검색어를 넓히고 ② 넓게 찾은 후보를 재정렬 모델로 다시 고른다.
             if not cfg["api_key"]:
@@ -196,7 +238,7 @@ class Handler(SimpleHTTPRequestHandler):
                     terms = [t.strip(" .·-\"'") for t in re.split(r"[,\n]", text) if 1 < len(t.strip()) <= 20][:10]
                 except (ValueError, KeyError, IndexError, TypeError):
                     note = f"검색어 넓히기 실패(응답 코드 {status})"
-            found = index.search(q, int(cfg["rerank_candidates"]), extra=terms, cutoff=0)
+            found = index.search(q, int(cfg["rerank_candidates"]), extra=terms, cutoff=0, qvec=question_vector(cfg, index, q))
             if len(found) > 1:
                 texts = [(c["file"].rsplit("/", 1)[-1] + " | " + (c["title"] + " | " if c["title"] and c["title"] not in c["text"] else "") + c["text"])[:1500] for c in found]
                 status, raw = call_api(cfg, cfg["rerank_path"], {"model": cfg["rerank_model"], "query": q, "documents": texts, "top_n": 5})

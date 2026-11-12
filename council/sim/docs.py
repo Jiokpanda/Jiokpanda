@@ -17,6 +17,7 @@ import re
 import threading
 import time
 import zipfile
+from array import array
 from collections import Counter, defaultdict
 from pathlib import Path
 from xml.etree import ElementTree
@@ -268,7 +269,8 @@ SYNONYMS = [
 ]
 WANTS_NUMBER = re.compile(r"얼마|몇|수는|수가|현황|규모|비율|률|금액|예산|건수|인원|통계|실적")
 LOOKS_LIKE_QUESTION = re.compile(r"\?|십니까|습니까|입니까|주십시오|선택해 ?주")
-HAS_FIGURE = re.compile(r"\d[\d,.]*\s*(명|건|원|천원|백만원|억|%|％|회|개|곳|대|권|시간|일|년|월)")
+# 수치로 치는 것: 단위가 붙은 숫자. '3개월', '2026년' 같은 기간·날짜는 설문지나 머리말에도 흔해서 뺀다.
+HAS_FIGURE = re.compile(r"\d[\d,.]*\s*(명|건|원|천원|백만원|억|%|％|회|개(?!월)|곳|대|권|시간)")
 
 def grams(text):
     """한글은 띄어쓰기와 조사가 제각각이라 두 글자씩 겹쳐 자른 조각으로 맞춘다."""
@@ -281,8 +283,92 @@ def grams(text):
     return out
 
 
+# ---------- 뜻으로 찾기(임베딩) ----------
+
+class EmbedError(Exception):
+    def __init__(self, status, detail):
+        super().__init__(f"응답 코드 {status}: {detail}")
+        self.status = status
+
+
+def chunk_key(c):
+    return hashlib.sha1((c["title"] + "\n" + c["text"]).encode("utf-8")).hexdigest()[:20]
+
+
+def chunk_text(c):
+    name = c["file"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    head = c["title"] if c["title"] and c["title"] not in c["text"] else ""
+    return (name + "\n" + (head + "\n" if head else "") + c["text"])[:1500]
+
+
+def unit(vec):
+    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+    return [v / norm for v in vec]
+
+
+class Vectors:
+    """대목의 벡터를 이 PC의 파일 두 개(열쇠 목록, 숫자 덩어리)에 담아 둔다. 별도 벡터DB는 쓰지 않는다."""
+
+    def __init__(self, cache_dir, model):
+        tag = re.sub(r"[^A-Za-z0-9._-]", "_", model)
+        self.keys_path = Path(cache_dir) / f"vectors_{tag}.json"
+        self.data_path = Path(cache_dir) / f"vectors_{tag}.bin"
+        self.model, self.dim, self.keys, self.row, self.data = model, 0, [], {}, array("f")
+        self.matrix = None
+        try:
+            meta = json.loads(self.keys_path.read_text(encoding="utf-8"))
+            data = array("f")
+            data.frombytes(self.data_path.read_bytes())
+            if meta["dim"] and len(data) == meta["dim"] * len(meta["keys"]):
+                self.dim, self.keys, self.data = meta["dim"], meta["keys"], data
+                self.row = {k: i for i, k in enumerate(self.keys)}
+        except (OSError, ValueError, KeyError):
+            pass
+
+    def add(self, key, vec):
+        if not self.dim:
+            self.dim = len(vec)
+        if len(vec) != self.dim or key in self.row:
+            return
+        self.row[key] = len(self.keys)
+        self.keys.append(key)
+        self.data.extend(unit(vec))
+        self.matrix = None
+
+    def save(self):
+        self.keys_path.parent.mkdir(parents=True, exist_ok=True)
+        self.data_path.write_bytes(self.data.tobytes())
+        self.keys_path.write_text(json.dumps({"model": self.model, "dim": self.dim, "keys": self.keys}), encoding="utf-8")
+
+    def clear(self):
+        for path in (self.keys_path, self.data_path):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        self.dim, self.keys, self.row, self.data, self.matrix = 0, [], {}, array("f"), None
+
+    def nearest(self, qvec, rows, n):
+        """rows(대목 번호 → 벡터 줄 번호) 가운데 질문 벡터와 가장 가까운 n개를 (대목 번호, 가까운 정도)로 돌려준다."""
+        if not self.dim or len(qvec) != self.dim:
+            return []
+        q = unit(qvec)
+        try:                                   # numpy가 있으면 그것으로, 없으면 파이썬만으로 계산한다
+            import numpy
+            if self.matrix is None:
+                self.matrix = numpy.frombuffer(self.data, dtype=numpy.float32).reshape(-1, self.dim)
+            sims = self.matrix @ numpy.asarray(q, dtype=numpy.float32)
+            scored = [(i, float(sims[r])) for i, r in rows]
+        except ImportError:
+            dot = getattr(math, "sumprod", None) or (lambda a, b: sum(x * y for x, y in zip(a, b)))
+            d, data = self.dim, self.data
+            scored = [(i, dot(q, data[r * d:(r + 1) * d])) for i, r in rows]
+        scored.sort(key=lambda kv: -kv[1])
+        return scored[:n]
+
+
 class Index:
-    def __init__(self, folder, cache_dir=None):
+    def __init__(self, folder, cache_dir=None, embed_model=""):
         self.folder = Path(folder)
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.lock = threading.Lock()
@@ -290,6 +376,10 @@ class Index:
         self.posting, self.lengths, self.average = {}, [], 1.0
         self.asking, self.figures, self.same = [], [], []     # 대목별: 질문 모양인지, 수치가 몇 개인지, 같은 내용 묶음
         self.loading, self.progress, self.seconds = False, {"done": 0, "total": 0, "current": ""}, 0.0
+        self.vectors = Vectors(self.cache_dir, embed_model) if self.cache_dir and embed_model else None
+        self.rows = []                                   # (대목 번호, 벡터 줄 번호): 벡터가 있는 대목만
+        self.embedding = {"building": False, "done": 0, "total": 0, "skipped": 0, "error": ""}
+        self.embed_stop = threading.Event()
 
     def start(self):
         """뒤에서 읽기 시작한다. 읽는 동안에도 상태 조회와 (이전 색인으로) 찾기는 된다."""
@@ -406,22 +496,107 @@ class Index:
             self.chunks, self.files = chunks, files
             self.posting, self.lengths = dict(posting), lengths
             self.asking, self.figures, self.same = asking, figures, same
+            self._align()
             self.average = (sum(lengths) / len(lengths)) if lengths else 1.0
             self.loading, self.seconds = False, round(time.time() - began, 1)
         return self.status()
 
+    def _align(self):
+        """읽어 둔 대목과 저장된 벡터를 짝짓는다(잠금을 쥔 상태에서 부른다)."""
+        self.rows = []
+        if self.vectors and self.vectors.dim:
+            row = self.vectors.row
+            self.rows = [(i, row[k]) for i, k in ((i, chunk_key(c)) for i, c in enumerate(self.chunks)) if k in row]
+
+    def embed_start(self, embed):
+        """벡터가 없는 대목을 묶음으로 보내 벡터를 받아 온다. embed(글 목록) → 벡터 목록."""
+        with self.lock:
+            if not self.vectors or self.embedding["building"] or self.loading:
+                return
+            have = self.vectors.row
+            todo, seen = [], set()
+            for c in self.chunks:
+                k = chunk_key(c)
+                if k not in have and k not in seen:
+                    seen.add(k)
+                    todo.append((k, chunk_text(c)))
+            self.embedding = {"building": True, "done": 0, "total": len(todo), "skipped": 0, "error": ""}
+            self.embed_stop.clear()
+
+        def send(batch, depth=0):
+            """묶음이 거절되면 반으로 나눠 다시 보내, 문제가 되는 대목만 건너뛴다."""
+            for attempt in range(6):
+                if self.embed_stop.is_set():
+                    return
+                try:
+                    vecs = embed([t for _, t in batch])
+                    with self.lock:
+                        for (k, _), v in zip(batch, vecs):
+                            self.vectors.add(k, v)
+                        self.embedding["done"] += len(batch)
+                    return
+                except EmbedError as e:
+                    if e.status == 429 or e.status >= 500 or e.status == 0:     # 잠시 뒤 다시
+                        time.sleep(4 + attempt * 4)
+                        continue
+                    if e.status in (401, 402, 403, 404) and depth == 0 and not self.vectors.keys:
+                        raise                                               # 키·크레딧·모델 문제는 계속해도 소용없다
+                    if len(batch) > 1:
+                        half = len(batch) // 2
+                        send(batch[:half], depth + 1)
+                        send(batch[half:], depth + 1)
+                    else:
+                        with self.lock:
+                            self.embedding["done"] += 1
+                            self.embedding["skipped"] += 1
+                            self.embedding["error"] = str(e)[:200]
+                    return
+            with self.lock:
+                self.embedding["done"] += len(batch)
+                self.embedding["skipped"] += len(batch)
+
+        def work():
+            try:
+                for n in range(0, len(todo), 48):
+                    if self.embed_stop.is_set():
+                        break
+                    send(todo[n:n + 48])
+                    if n % 960 == 0:
+                        with self.lock:
+                            self.vectors.save()                      # 중간에 끊겨도 이어서 할 수 있게 틈틈이 저장
+                    time.sleep(0.6)                                  # 게이트웨이의 분당 요청 한도 안쪽으로
+            except EmbedError as e:
+                with self.lock:
+                    self.embedding["error"] = str(e)[:300]
+            with self.lock:
+                self.vectors.save()
+                self._align()
+                self.embedding["building"] = False
+        threading.Thread(target=work, daemon=True).start()
+
+    def embed_clear(self):
+        self.embed_stop.set()
+        with self.lock:
+            if self.vectors:
+                self.vectors.clear()
+            self.rows = []
+            self.embedding = {"building": False, "done": 0, "total": 0, "skipped": 0, "error": ""}
+
     def status(self):
         with self.lock:
             return {"folder": str(self.folder), "exists": self.folder.is_dir(), "files": self.files, "chunks": len(self.chunks),
-                    "loading": self.loading, "progress": dict(self.progress), "seconds": self.seconds}
+                    "loading": self.loading, "progress": dict(self.progress), "seconds": self.seconds,
+                    "embed": dict(self.embedding, model=self.vectors.model if self.vectors else "", have=len(self.rows),
+                                  dim=self.vectors.dim if self.vectors else 0)}
 
-    def search(self, query, k=5, extra=(), cutoff=0.3):
+    def search(self, query, k=5, extra=(), cutoff=0.3, qvec=None):
         """질문에 답이 될 만한 대목을 돌려준다.
 
         질문의 말투는 떼고 내용 낱말만으로 찾되, 같은 뜻의 낱말도 함께 찾는다. 물음만 있는 대목(설문 문항 등)은
         뒤로 보내고, 수치를 묻는 질문이면 수치가 든 대목을 앞세운다. 내용이 같은 대목은 하나만 남긴다.
         extra에는 추가로 찾을 낱말(예: AI가 넓혀 준 검색어)을 넣는다.
         cutoff는 1위 점수의 이 비율에 못 미치는 대목을 버리는 기준이다(재정렬용 후보를 넓게 뽑을 때는 0).
+        qvec(질문의 벡터)을 주면 뜻이 가까운 대목도 함께 찾아, 낱말 순위와 뜻 순위를 합쳐 줄을 세운다.
         """
         query = squeeze(query)
         core = squeeze(ASK_WORDS.sub(" ", query)) or query
@@ -449,8 +624,30 @@ class Index:
                 idf = math.log(1 + (total - len(hits) + 0.5) / (len(hits) + 0.5))
                 for i, n in hits:
                     scores[i] += w * idf * n * 2.2 / (n + 1.2 * (0.25 + 0.75 * self.lengths[i] / self.average))
+            via = {}
+            if qvec and self.rows:
+                # 낱말 점수와 뜻 점수를 각각 0~1로 맞춘 뒤 반반씩 더한다. 한쪽에서만 높아도 올라오고,
+                # 둘 다 높으면 더 올라온다. (등수만 쓰면 점수 차이가 사라져 뚜렷한 1위가 묻힌다.)
+                near = self.vectors.nearest(qvec, self.rows, 150)
+                words = sorted(scores.items(), key=lambda kv: -kv[1])[:150]
+                fused = defaultdict(float)
+                best = words[0][1] if words else 1.0
+                for i, sc in words:
+                    fused[i] += 0.5 * sc / best
+                    via[i] = "낱말"
+                if near:
+                    high, low = near[0][1], near[-1][1]
+                    span = (high - low) or 1.0
+                    for i, sim in near:
+                        part = 0.5 * (sim - low) / span
+                        if part > 0.2:
+                            via[i] = "낱말+뜻" if i in via else "뜻"
+                        fused[i] += part
+                scores = fused
+            # 물음만 있는 대목(설문 문항 등)은 뒤로, 수치가 든 대목은 앞으로. 뜻으로 찾아도 설문 문항은 질문과
+            # 가깝게 나오므로, 합친 뒤에 적용해야 한다.
             for i in scores:
-                scores[i] *= 1.0 + min(self.figures[i], 4) * (0.12 if wants_number else 0.05)
+                scores[i] *= 1.0 + min(self.figures[i], 4) * (0.08 if wants_number else 0.03)
                 if self.asking[i]:
                     scores[i] *= 0.4
             out, seen = [], {}
@@ -461,7 +658,7 @@ class Index:
                     continue
                 if out and sc < out[0]["score"] * cutoff:
                     break
-                item = dict(self.chunks[i], score=round(sc, 2), id=i, copies=0)
+                item = dict(self.chunks[i], score=round(sc, 4), id=i, copies=0, via=via.get(i, ""))
                 seen[key] = item
                 out.append(item)
                 if len(out) >= k:
